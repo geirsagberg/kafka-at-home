@@ -1,6 +1,7 @@
 package no.geirsagberg.kafkaathome.api
 
 import no.geirsagberg.kafkaathome.model.Vegobjekt
+import no.geirsagberg.kafkaathome.model.VegobjekterResponse
 import no.geirsagberg.kafkaathome.model.Veglenkesekvens
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -39,6 +40,7 @@ class NvdbApiClient(private val nvdbWebClient: WebClient) {
 
     /**
      * Stream road objects (vegobjekter) of a specific type from the NVDB API.
+     * Uses the NDJSON stream endpoint.
      *
      * @param typeId The type ID of the road object (e.g., 105 for speed limits)
      * @param antall Maximum number of records to fetch per request
@@ -53,6 +55,7 @@ class NvdbApiClient(private val nvdbWebClient: WebClient) {
                     .queryParam("antall", antall)
                     .build()
             }
+            .accept(org.springframework.http.MediaType.APPLICATION_NDJSON)
             .retrieve()
             .bodyToFlux(Vegobjekt::class.java)
     }

@@ -8,6 +8,9 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.annotation.EnableKafkaStreams
 import org.springframework.kafka.annotation.KafkaStreamsDefaultConfiguration
 import org.springframework.kafka.config.KafkaStreamsConfiguration
+import org.springframework.kafka.core.DefaultKafkaProducerFactory
+import org.springframework.kafka.core.KafkaTemplate
+import org.springframework.kafka.core.ProducerFactory
 
 @Configuration
 @EnableKafkaStreams
@@ -28,5 +31,21 @@ class KafkaStreamsConfig {
         props[StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG] = Serdes.String().javaClass.name
         props[StreamsConfig.STATE_DIR_CONFIG] = "/tmp/kafka-streams"
         return KafkaStreamsConfiguration(props)
+    }
+
+    @Bean
+    fun producerFactory(): ProducerFactory<String, String> {
+        val configProps = mutableMapOf<String, Any>()
+        configProps[org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG] = bootstrapServers
+        configProps[org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG] = 
+            org.apache.kafka.common.serialization.StringSerializer::class.java
+        configProps[org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG] = 
+            org.apache.kafka.common.serialization.StringSerializer::class.java
+        return DefaultKafkaProducerFactory(configProps)
+    }
+
+    @Bean
+    fun kafkaTemplate(): KafkaTemplate<String, String> {
+        return KafkaTemplate(producerFactory())
     }
 }

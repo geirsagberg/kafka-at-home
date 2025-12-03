@@ -1,5 +1,7 @@
 package no.geirsagberg.kafkaathome.config
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -15,5 +17,10 @@ class WebClientConfig(private val nvdbApiProperties: NvdbApiProperties) {
             .baseUrl(nvdbApiProperties.baseUrl)
             .defaultHeader("Accept", "application/json")
             .build()
+    }
+
+    @Bean
+    fun objectMapper(): ObjectMapper {
+        return jacksonObjectMapper()
     }
 }

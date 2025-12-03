@@ -92,6 +92,9 @@ data class Vegobjekt(
     @JsonProperty("versjon")
     val versjon: Int? = null,
 
+    @JsonProperty("gyldighetsperiode")
+    val gyldighetsperiode: Gyldighetsperiode? = null,
+
     @JsonProperty("startdato")
     val startdato: String? = null,
 
@@ -99,13 +102,28 @@ data class Vegobjekt(
     val sluttdato: String? = null,
 
     @JsonProperty("egenskaper")
-    val egenskaper: List<Egenskap> = emptyList(),
+    val egenskaper: Map<String, Any>? = null,
 
     @JsonProperty("stedfesting")
     val stedfesting: Stedfesting? = null,
 
     @JsonProperty("geometri")
-    val geometri: Geometri? = null
+    val geometri: Geometri? = null,
+
+    @JsonProperty("sistEndret")
+    val sistEndret: String? = null
+)
+
+/**
+ * Represents the validity period of a road object.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class Gyldighetsperiode(
+    @JsonProperty("startdato")
+    val startdato: String? = null,
+
+    @JsonProperty("sluttdato")
+    val sluttdato: String? = null
 )
 
 /**
@@ -161,8 +179,8 @@ data class VeglenkeStedfesting(
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class VegobjekterResponse(
-    @JsonProperty("objekter")
-    val objekter: List<Vegobjekt> = emptyList(),
+    @JsonProperty("vegobjekter")
+    val vegobjekter: List<Vegobjekt> = emptyList(),
 
     @JsonProperty("metadata")
     val metadata: ResponseMetadata? = null

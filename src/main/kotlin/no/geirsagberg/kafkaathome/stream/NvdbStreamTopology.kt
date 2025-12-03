@@ -83,12 +83,11 @@ class NvdbStreamTopology(
                 "id" to vegobjekt.id,
                 "typeId" to vegobjekt.typeId,
                 "versjon" to vegobjekt.versjon,
-                "startdato" to vegobjekt.startdato,
-                "sluttdato" to vegobjekt.sluttdato,
-                "egenskaper" to vegobjekt.egenskaper.associate { 
-                    (it.navn ?: "unknown") to it.verdi 
-                },
+                "gyldighetsperiode" to vegobjekt.gyldighetsperiode,
+                "egenskaper" to vegobjekt.egenskaper,
+                "stedfesting" to vegobjekt.stedfesting,
                 "geometri" to vegobjekt.geometri?.wkt,
+                "sistEndret" to vegobjekt.sistEndret,
                 "processedAt" to System.currentTimeMillis()
             )
             
