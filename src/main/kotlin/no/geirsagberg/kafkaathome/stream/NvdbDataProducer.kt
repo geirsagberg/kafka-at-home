@@ -5,6 +5,7 @@ import no.geirsagberg.kafkaathome.api.NvdbApiClient
 import no.geirsagberg.kafkaathome.model.Vegobjekt
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
@@ -16,6 +17,7 @@ import reactor.core.scheduler.Schedulers
  * This bridges the REST API with Kafka Streams processing.
  */
 @Service
+@ConditionalOnProperty(name = ["nvdb.producer.enabled"], havingValue = "true")
 class NvdbDataProducer(
     private val nvdbApiClient: NvdbApiClient,
     private val kafkaTemplate: KafkaTemplate<String, String>,

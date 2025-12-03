@@ -2,6 +2,7 @@ package no.geirsagberg.kafkaathome.controller
 
 import no.geirsagberg.kafkaathome.api.NvdbApiClient
 import no.geirsagberg.kafkaathome.stream.NvdbDataProducer
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Mono
@@ -12,7 +13,7 @@ import reactor.core.publisher.Mono
 @RestController
 @RequestMapping("/api/nvdb")
 class NvdbController(
-    private val nvdbDataProducer: NvdbDataProducer,
+    @Autowired(required = false) private val nvdbDataProducer: NvdbDataProducer?,
     private val nvdbApiClient: NvdbApiClient
 ) {
 
@@ -25,17 +26,22 @@ class NvdbController(
     fun fetchSpeedLimits(
         @RequestParam(defaultValue = "100") count: Int
     ): Mono<ResponseEntity<FetchResponse>> {
-        return nvdbDataProducer.fetchAndProduceVegobjekter(
-            NvdbApiClient.TYPE_FARTSGRENSE, 
+        return nvdbDataProducer?.fetchAndProduceVegobjekter(
+            NvdbApiClient.TYPE_FARTSGRENSE,
             count
-        ).map { total ->
+        )?.map { total ->
             ResponseEntity.ok(FetchResponse(
                 typeId = NvdbApiClient.TYPE_FARTSGRENSE,
                 typeName = "Fartsgrense (Speed Limits)",
                 count = total.toInt(),
                 status = "success"
             ))
-        }
+        } ?: Mono.just(ResponseEntity.status(503).body(FetchResponse(
+            typeId = NvdbApiClient.TYPE_FARTSGRENSE,
+            typeName = "Fartsgrense (Speed Limits)",
+            count = 0,
+            status = "producer disabled"
+        )))
     }
 
     /**
@@ -49,15 +55,20 @@ class NvdbController(
         @PathVariable typeId: Int,
         @RequestParam(defaultValue = "100") count: Int
     ): Mono<ResponseEntity<FetchResponse>> {
-        return nvdbDataProducer.fetchAndProduceVegobjekter(typeId, count)
-            .map { total ->
+        return nvdbDataProducer?.fetchAndProduceVegobjekter(typeId, count)
+            ?.map { total ->
                 ResponseEntity.ok(FetchResponse(
                     typeId = typeId,
                     typeName = getTypeName(typeId),
                     count = total.toInt(),
                     status = "success"
                 ))
-            }
+            } ?: Mono.just(ResponseEntity.status(503).body(FetchResponse(
+                typeId = typeId,
+                typeName = getTypeName(typeId),
+                count = 0,
+                status = "producer disabled"
+            )))
     }
 
     /**
