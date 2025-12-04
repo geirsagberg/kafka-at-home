@@ -1,9 +1,8 @@
 package no.geirsagberg.kafkaathome.api
 
+import kotlinx.coroutines.reactor.awaitSingle
 import no.geirsagberg.kafkaathome.model.Vegobjekt
-import no.geirsagberg.kafkaathome.model.VegobjekterResponse
 import no.geirsagberg.kafkaathome.model.Veglenke
-import no.geirsagberg.kafkaathome.model.Veglenkesekvens
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
@@ -19,25 +18,6 @@ import reactor.core.publisher.Flux
 class NvdbApiClient(private val nvdbWebClient: WebClient) {
 
     private val logger = LoggerFactory.getLogger(NvdbApiClient::class.java)
-
-    /**
-     * Stream road link sequences (veglenkesekvenser) from the NVDB API.
-     *
-     * @param antall Maximum number of records to fetch per request
-     * @return Flux of Veglenkesekvens objects
-     */
-    suspend fun streamVeglenkesekvenser(antall: Int = 1000): List<Veglenkesekvens> {
-        logger.info("Fetching veglenkesekvenser from NVDB API")
-        return nvdbWebClient.get()
-            .uri { uriBuilder ->
-                uriBuilder
-                    .path("vegnett/veglenkesekvenser/stream")
-                    .queryParam("antall", antall)
-                    .build()
-            }
-            .retrieve()
-            .awaitBody()
-    }
 
     /**
      * Stream road objects (vegobjekter) of a specific type from the NVDB API.
@@ -77,26 +57,30 @@ class NvdbApiClient(private val nvdbWebClient: WebClient) {
     }
 
     /**
-     * Fetch veglenker by their IDs with pagination support.
-     * Returns all veglenker across all pages for the given IDs.
+     * Fetch veglenker by veglenkesekvens IDs using the streaming API.
+     * The stream endpoint returns flattened Veglenke objects directly.
+     * One veglenkesekvens contains many veglenker (identified by veglenkenummer).
      *
-     * @param ider List of veglenkesekvens IDs
+     * Pagination: The start parameter should be "[veglenkesekvensId]-[veglenkenummer]"
+     * from the last veglenke received.
+     *
+     * @param veglenkesekvensIds List of veglenkesekvens IDs
      * @param antall Records per page (default: 1000)
-     * @return List of all Veglenke objects
+     * @return List of all Veglenke objects from the given veglenkesekvenser
      */
-    suspend fun fetchVeglenkerByIds(ider: List<Long>, antall: Int = 1000): List<Veglenke> {
-        if (ider.isEmpty()) return emptyList()
+    suspend fun fetchVeglenkerByVeglenkesekvensIds(veglenkesekvensIds: List<Long>, antall: Int = 1000): List<Veglenke> {
+        if (veglenkesekvensIds.isEmpty()) return emptyList()
 
-        logger.debug("Fetching veglenker for {} IDs", ider.size)
+        logger.debug("Fetching veglenker for {} veglenkesekvens IDs", veglenkesekvensIds.size)
         val allVeglenker = mutableListOf<Veglenke>()
         var start: String? = null
 
         do {
             val currentStart = start
-            val response: no.geirsagberg.kafkaathome.model.VeglenkesekvensResponse = nvdbWebClient.get()
+            val batch = nvdbWebClient.get()
                 .uri { uriBuilder ->
                     val builder = uriBuilder.path("vegnett/veglenker/stream")
-                    ider.forEach { id -> builder.queryParam("ider", id) }
+                    veglenkesekvensIds.forEach { id -> builder.queryParam("ider", id) }
                     builder.queryParam("antall", antall)
                     if (currentStart != null) {
                         builder.queryParam("start", currentStart)
@@ -104,13 +88,25 @@ class NvdbApiClient(private val nvdbWebClient: WebClient) {
                     builder.build()
                 }
                 .retrieve()
-                .awaitBody()
+                .bodyToFlux(Veglenke::class.java)
+                .collectList()
+                .awaitSingle()
 
-            response.objekter.forEach { sekvens ->
-                allVeglenker.addAll(sekvens.veglenker)
+            allVeglenker.addAll(batch)
+
+            // Set start parameter as "[veglenkesekvensId]-[veglenkenummer]" from last veglenke
+            if (batch.size == antall) {
+                val lastVeglenke = batch.last()
+                val sekvensId = lastVeglenke.veglenkesekvensId
+                val veglenkenr = lastVeglenke.veglenkenummer
+                if (sekvensId != null && veglenkenr != null) {
+                    start = "$sekvensId-$veglenkenr"
+                } else {
+                    start = null
+                }
+            } else {
+                start = null
             }
-
-            start = response.metadata?.neste?.start
         } while (start != null)
 
         logger.debug("Fetched {} veglenker total", allVeglenker.size)
@@ -121,9 +117,9 @@ class NvdbApiClient(private val nvdbWebClient: WebClient) {
      * Blocking version for use in Kafka Streams topology.
      * Leverages virtual threads for efficient blocking.
      */
-    fun fetchVeglenkerByIdsBlocking(ider: List<Long>, antall: Int = 1000): List<Veglenke> {
+    fun fetchVeglenkerByVeglenkesekvensIdsBlocking(veglenkesekvensIds: List<Long>, antall: Int = 1000): List<Veglenke> {
         return kotlinx.coroutines.runBlocking {
-            fetchVeglenkerByIds(ider, antall)
+            fetchVeglenkerByVeglenkesekvensIds(veglenkesekvensIds, antall)
         }
     }
 

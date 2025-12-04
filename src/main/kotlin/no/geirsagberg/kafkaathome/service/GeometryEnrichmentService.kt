@@ -23,7 +23,7 @@ class GeometryEnrichmentService(
         if (veglenkesekvensIds.isEmpty()) return vegobjekt
 
         return try {
-            val veglenker = nvdbApiClient.fetchVeglenkerByIdsBlocking(veglenkesekvensIds)
+            val veglenker = nvdbApiClient.fetchVeglenkerByVeglenkesekvensIdsBlocking(veglenkesekvensIds)
 
             val geometries = veglenker.mapNotNull { veglenke -> veglenke.geometri?.wkt }
 

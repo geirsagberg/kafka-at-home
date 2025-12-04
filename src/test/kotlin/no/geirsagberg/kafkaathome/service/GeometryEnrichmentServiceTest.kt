@@ -41,7 +41,7 @@ class GeometryEnrichmentServiceTest {
             )
         )
 
-        `when`(nvdbApiClient.fetchVeglenkerByIdsBlocking(listOf(1L, 2L)))
+        `when`(nvdbApiClient.fetchVeglenkerByVeglenkesekvensIdsBlocking(listOf(1L, 2L)))
             .thenReturn(veglenker)
 
         val enriched = enrichmentService.enrichWithGeometry(vegobjekt)
@@ -52,7 +52,7 @@ class GeometryEnrichmentServiceTest {
         assertEquals("LINESTRING(10.0 60.0, 10.1 60.1)", enriched.stedfesting?.geometries?.get(0))
         assertEquals("LINESTRING(10.1 60.1, 10.2 60.2)", enriched.stedfesting?.geometries?.get(1))
 
-        verify(nvdbApiClient).fetchVeglenkerByIdsBlocking(listOf(1L, 2L))
+        verify(nvdbApiClient).fetchVeglenkerByVeglenkesekvensIdsBlocking(listOf(1L, 2L))
     }
 
     @Test
@@ -128,7 +128,7 @@ class GeometryEnrichmentServiceTest {
             )
         )
 
-        `when`(nvdbApiClient.fetchVeglenkerByIdsBlocking(listOf(1L)))
+        `when`(nvdbApiClient.fetchVeglenkerByVeglenkesekvensIdsBlocking(listOf(1L)))
             .thenReturn(veglenker)
 
         val enriched = enrichmentService.enrichWithGeometry(vegobjekt)
@@ -151,7 +151,7 @@ class GeometryEnrichmentServiceTest {
             )
         )
 
-        `when`(nvdbApiClient.fetchVeglenkerByIdsBlocking(listOf(1L)))
+        `when`(nvdbApiClient.fetchVeglenkerByVeglenkesekvensIdsBlocking(listOf(1L)))
             .thenThrow(RuntimeException("API Error"))
 
         val enriched = enrichmentService.enrichWithGeometry(vegobjekt)
@@ -177,7 +177,7 @@ class GeometryEnrichmentServiceTest {
             Veglenke(geometri = null)
         )
 
-        `when`(nvdbApiClient.fetchVeglenkerByIdsBlocking(listOf(1L)))
+        `when`(nvdbApiClient.fetchVeglenkerByVeglenkesekvensIdsBlocking(listOf(1L)))
             .thenReturn(veglenker)
 
         val enriched = enrichmentService.enrichWithGeometry(vegobjekt)
@@ -206,12 +206,12 @@ class GeometryEnrichmentServiceTest {
             )
         )
 
-        `when`(nvdbApiClient.fetchVeglenkerByIdsBlocking(listOf(1L, 2L)))
+        `when`(nvdbApiClient.fetchVeglenkerByVeglenkesekvensIdsBlocking(listOf(1L, 2L)))
             .thenReturn(veglenker)
 
         val enriched = enrichmentService.enrichWithGeometry(vegobjekt)
 
         assertNotNull(enriched.stedfesting?.geometries)
-        verify(nvdbApiClient).fetchVeglenkerByIdsBlocking(listOf(1L, 2L))
+        verify(nvdbApiClient).fetchVeglenkerByVeglenkesekvensIdsBlocking(listOf(1L, 2L))
     }
 }
