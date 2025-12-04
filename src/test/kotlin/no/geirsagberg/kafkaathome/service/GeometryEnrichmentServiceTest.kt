@@ -24,21 +24,19 @@ class GeometryEnrichmentServiceTest {
             id = 12345L,
             typeId = 105,
             stedfesting = Stedfesting(
-                type = "punkt",
-                veglenkesekvensider = listOf(
-                    VeglenkeStedfesting(veglenkesekvensId = 1L),
-                    VeglenkeStedfesting(veglenkesekvensId = 2L)
+                type = "StedfestingLinjer",
+                linjer = listOf(
+                    StedfestingLinje(veglenkesekvensId = 1L),
+                    StedfestingLinje(veglenkesekvensId = 2L)
                 )
             )
         )
 
         val veglenker = listOf(
             Veglenke(
-                veglenkeId = 101L,
                 geometri = Geometri(wkt = "LINESTRING(10.0 60.0, 10.1 60.1)")
             ),
             Veglenke(
-                veglenkeId = 102L,
                 geometri = Geometri(wkt = "LINESTRING(10.1 60.1, 10.2 60.2)")
             )
         )
@@ -72,13 +70,13 @@ class GeometryEnrichmentServiceTest {
     }
 
     @Test
-    fun `should return original vegobjekt when veglenkesekvensider is null`() {
+    fun `should return original vegobjekt when linjer is null`() {
         val vegobjekt = Vegobjekt(
             id = 12345L,
             typeId = 105,
             stedfesting = Stedfesting(
                 type = "punkt",
-                veglenkesekvensider = null
+                linjer = null
             )
         )
 
@@ -89,13 +87,13 @@ class GeometryEnrichmentServiceTest {
     }
 
     @Test
-    fun `should return original vegobjekt when veglenkesekvensider is empty`() {
+    fun `should return original vegobjekt when linjer is empty`() {
         val vegobjekt = Vegobjekt(
             id = 12345L,
             typeId = 105,
             stedfesting = Stedfesting(
                 type = "punkt",
-                veglenkesekvensider = emptyList()
+                linjer = emptyList()
             )
         )
 
@@ -111,24 +109,21 @@ class GeometryEnrichmentServiceTest {
             id = 12345L,
             typeId = 105,
             stedfesting = Stedfesting(
-                type = "punkt",
-                veglenkesekvensider = listOf(
-                    VeglenkeStedfesting(veglenkesekvensId = 1L)
+                type = "StedfestingLinjer",
+                linjer = listOf(
+                    StedfestingLinje(veglenkesekvensId = 1L)
                 )
             )
         )
 
         val veglenker = listOf(
             Veglenke(
-                veglenkeId = 101L,
                 geometri = Geometri(wkt = "LINESTRING(10.0 60.0, 10.1 60.1)")
             ),
             Veglenke(
-                veglenkeId = 102L,
                 geometri = null
             ),
             Veglenke(
-                veglenkeId = 103L,
                 geometri = Geometri(wkt = null)
             )
         )
@@ -149,9 +144,9 @@ class GeometryEnrichmentServiceTest {
             id = 12345L,
             typeId = 105,
             stedfesting = Stedfesting(
-                type = "punkt",
-                veglenkesekvensider = listOf(
-                    VeglenkeStedfesting(veglenkesekvensId = 1L)
+                type = "StedfestingLinjer",
+                linjer = listOf(
+                    StedfestingLinje(veglenkesekvensId = 1L)
                 )
             )
         )
@@ -171,15 +166,15 @@ class GeometryEnrichmentServiceTest {
             id = 12345L,
             typeId = 105,
             stedfesting = Stedfesting(
-                type = "punkt",
-                veglenkesekvensider = listOf(
-                    VeglenkeStedfesting(veglenkesekvensId = 1L)
+                type = "StedfestingLinjer",
+                linjer = listOf(
+                    StedfestingLinje(veglenkesekvensId = 1L)
                 )
             )
         )
 
         val veglenker = listOf(
-            Veglenke(veglenkeId = 101L, geometri = null)
+            Veglenke(geometri = null)
         )
 
         `when`(nvdbApiClient.fetchVeglenkerByIdsBlocking(listOf(1L)))
@@ -196,18 +191,17 @@ class GeometryEnrichmentServiceTest {
             id = 12345L,
             typeId = 105,
             stedfesting = Stedfesting(
-                type = "punkt",
-                veglenkesekvensider = listOf(
-                    VeglenkeStedfesting(veglenkesekvensId = 1L),
-                    VeglenkeStedfesting(veglenkesekvensId = null),
-                    VeglenkeStedfesting(veglenkesekvensId = 2L)
+                type = "StedfestingLinjer",
+                linjer = listOf(
+                    StedfestingLinje(veglenkesekvensId = 1L),
+                    StedfestingLinje(veglenkesekvensId = null),
+                    StedfestingLinje(veglenkesekvensId = 2L)
                 )
             )
         )
 
         val veglenker = listOf(
             Veglenke(
-                veglenkeId = 101L,
                 geometri = Geometri(wkt = "LINESTRING(10.0 60.0, 10.1 60.1)")
             )
         )

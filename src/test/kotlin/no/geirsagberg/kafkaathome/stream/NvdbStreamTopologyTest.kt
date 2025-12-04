@@ -2,6 +2,7 @@ package no.geirsagberg.kafkaathome.stream
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import no.geirsagberg.kafkaathome.model.Egenskap
+import no.geirsagberg.kafkaathome.model.EgenskapValue
 import no.geirsagberg.kafkaathome.model.Geometri
 import no.geirsagberg.kafkaathome.model.Vegobjekt
 import org.apache.kafka.common.serialization.Serdes
@@ -78,8 +79,7 @@ class NvdbStreamTopologyTest {
             id = 12345L,
             typeId = 105,
             versjon = 1,
-            startdato = "2023-01-01",
-            egenskaper = mapOf("Fartsgrense" to 80),
+            egenskaper = mapOf("Fartsgrense" to EgenskapValue(type = "TallEgenskap", verdi = 80)),
             geometri = Geometri(wkt = "POINT(10.0 60.0)", srid = 4326)
         )
         val inputJson = objectMapper.writeValueAsString(vegobjekt)
@@ -104,8 +104,7 @@ class NvdbStreamTopologyTest {
             id = 99999L,
             typeId = 105, // Speed limit type
             versjon = 1,
-            startdato = "2023-01-01",
-            egenskaper = mapOf("Fartsgrense" to 60)
+            egenskaper = mapOf("Fartsgrense" to EgenskapValue(type = "TallEgenskap", verdi = 60))
         )
         val inputJson = objectMapper.writeValueAsString(speedLimit)
 
@@ -139,8 +138,7 @@ class NvdbStreamTopologyTest {
             id = 88888L,
             typeId = 583, // Road width type (not speed limit)
             versjon = 1,
-            startdato = "2023-01-01",
-            egenskaper = mapOf("Bredde" to 7.5)
+            egenskaper = mapOf("Bredde" to EgenskapValue(type = "TallEgenskap", verdi = 7.5))
         )
         val inputJson = objectMapper.writeValueAsString(roadWidth)
 
@@ -164,8 +162,6 @@ class NvdbStreamTopologyTest {
                 "id" to vegobjekt.id,
                 "typeId" to vegobjekt.typeId,
                 "versjon" to vegobjekt.versjon,
-                "startdato" to vegobjekt.startdato,
-                "sluttdato" to vegobjekt.sluttdato,
                 "egenskaper" to vegobjekt.egenskaper,
                 "stedfesting" to vegobjekt.stedfesting,
                 "geometri" to vegobjekt.geometri?.wkt,
@@ -190,9 +186,9 @@ class NvdbStreamTopologyTest {
     @Test
     fun `should preserve stedfesting with geometries field`() {
         val stedfesting = no.geirsagberg.kafkaathome.model.Stedfesting(
-            type = "punkt",
-            veglenkesekvensider = listOf(
-                no.geirsagberg.kafkaathome.model.VeglenkeStedfesting(
+            type = "StedfestingLinjer",
+            linjer = listOf(
+                no.geirsagberg.kafkaathome.model.StedfestingLinje(
                     veglenkesekvensId = 1L,
                     startposisjon = 0.0,
                     sluttposisjon = 1.0

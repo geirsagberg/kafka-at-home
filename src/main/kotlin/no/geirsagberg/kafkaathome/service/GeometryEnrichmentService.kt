@@ -17,13 +17,13 @@ class GeometryEnrichmentService(
      */
     fun enrichWithGeometry(vegobjekt: Vegobjekt): Vegobjekt {
         val stedfesting = vegobjekt.stedfesting ?: return vegobjekt
-        val veglenkesekvensider = stedfesting.veglenkesekvensider?.mapNotNull { it.veglenkesekvensId }
+        val veglenkesekvensIds = stedfesting.linjer?.mapNotNull { it.veglenkesekvensId }
             ?: return vegobjekt
 
-        if (veglenkesekvensider.isEmpty()) return vegobjekt
+        if (veglenkesekvensIds.isEmpty()) return vegobjekt
 
         return try {
-            val veglenker = nvdbApiClient.fetchVeglenkerByIdsBlocking(veglenkesekvensider)
+            val veglenker = nvdbApiClient.fetchVeglenkerByIdsBlocking(veglenkesekvensIds)
 
             val geometries = veglenker.mapNotNull { veglenke -> veglenke.geometri?.wkt }
 

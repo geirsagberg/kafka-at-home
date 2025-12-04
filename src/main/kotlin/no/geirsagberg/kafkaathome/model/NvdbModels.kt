@@ -30,12 +30,43 @@ data class Veglenkesekvens(
 )
 
 /**
- * Represents a single road link (Veglenke) within a road link sequence.
+ * Represents a single road link (Veglenke) from the NVDB vegnett API.
+ * Road links are the atomic segments that make up the road network.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class Veglenke(
-    @JsonProperty("veglenkeid")
-    val veglenkeId: Long,
+    @JsonProperty("veglenkesekvensId")
+    val veglenkesekvensId: Long? = null,
+
+    @JsonProperty("veglenkenummer")
+    val veglenkenummer: Long? = null,
+
+    @JsonProperty("gyldighetsperiode")
+    val gyldighetsperiode: Gyldighetsperiode? = null,
+
+    @JsonProperty("konnektering")
+    val konnektering: Boolean? = null,
+
+    @JsonProperty("topologiniva")
+    val topologiniva: String? = null,
+
+    @JsonProperty("maledato")
+    val maledato: String? = null,
+
+    @JsonProperty("malemetode")
+    val malemetode: String? = null,
+
+    @JsonProperty("detaljniva")
+    val detaljniva: String? = null,
+
+    @JsonProperty("typeVeg")
+    val typeVeg: String? = null,
+
+    @JsonProperty("startnode")
+    val startnode: Long? = null,
+
+    @JsonProperty("sluttnode")
+    val sluttnode: Long? = null,
 
     @JsonProperty("startposisjon")
     val startposisjon: Double? = null,
@@ -43,23 +74,17 @@ data class Veglenke(
     @JsonProperty("sluttposisjon")
     val sluttposisjon: Double? = null,
 
-    @JsonProperty("startdato")
-    val startdato: String? = null,
-
-    @JsonProperty("sluttdato")
-    val sluttdato: String? = null,
-
-    @JsonProperty("typeVeg")
-    val typeVeg: String? = null,
-
-    @JsonProperty("detaljnivå")
-    val detaljniva: String? = null,
-
-    @JsonProperty("feltoversikt")
-    val feltoversikt: List<String>? = null,
+    @JsonProperty("kommune")
+    val kommune: Int? = null,
 
     @JsonProperty("geometri")
-    val geometri: Geometri? = null
+    val geometri: Geometri? = null,
+
+    @JsonProperty("lengde")
+    val lengde: Double? = null,
+
+    @JsonProperty("feltoversikt")
+    val feltoversikt: List<String>? = null
 )
 
 /**
@@ -74,7 +99,46 @@ data class Geometri(
     val srid: Int? = null,
 
     @JsonProperty("lengde")
-    val lengde: Double? = null
+    val lengde: Double? = null,
+
+    @JsonProperty("datafangstdato")
+    val datafangstdato: String? = null,
+
+    @JsonProperty("temakode")
+    val temakode: Int? = null,
+
+    @JsonProperty("kommune")
+    val kommune: Int? = null,
+
+    @JsonProperty("oppdateringsdato")
+    val oppdateringsdato: String? = null,
+
+    @JsonProperty("kvalitet")
+    val kvalitet: GeometriKvalitet? = null
+)
+
+/**
+ * Represents quality metadata for geometry data.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class GeometriKvalitet(
+    @JsonProperty("malemetode")
+    val malemetode: Int? = null,
+
+    @JsonProperty("malemetodeHoyde")
+    val malemetodeHoyde: Int? = null,
+
+    @JsonProperty("noyaktighet")
+    val noyaktighet: Int? = null,
+
+    @JsonProperty("noyaktighetHoyde")
+    val noyaktighetHoyde: Int? = null,
+
+    @JsonProperty("synbarhet")
+    val synbarhet: Int? = null,
+
+    @JsonProperty("maksimaltAvvik")
+    val maksimaltAvvik: Int? = null
 )
 
 /**
@@ -95,14 +159,11 @@ data class Vegobjekt(
     @JsonProperty("gyldighetsperiode")
     val gyldighetsperiode: Gyldighetsperiode? = null,
 
-    @JsonProperty("startdato")
-    val startdato: String? = null,
-
-    @JsonProperty("sluttdato")
-    val sluttdato: String? = null,
-
     @JsonProperty("egenskaper")
-    val egenskaper: Map<String, Any>? = null,
+    val egenskaper: Map<String, EgenskapValue>? = null,
+
+    @JsonProperty("barn")
+    val barn: Map<String, Any>? = null,
 
     @JsonProperty("stedfesting")
     val stedfesting: Stedfesting? = null,
@@ -145,6 +206,18 @@ data class Egenskap(
 )
 
 /**
+ * Represents a property value in the egenskaper map.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class EgenskapValue(
+    @JsonProperty("type")
+    val type: String? = null,
+
+    @JsonProperty("verdi")
+    val verdi: Any? = null
+)
+
+/**
  * Represents the location/placement of a road object on the road network.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -152,19 +225,20 @@ data class Stedfesting(
     @JsonProperty("type")
     val type: String? = null,
 
-    @JsonProperty("veglenkesekvensider")
-    val veglenkesekvensider: List<VeglenkeStedfesting>? = null,
+    @JsonProperty("linjer")
+    val linjer: List<StedfestingLinje>? = null,
 
     @JsonProperty("geometries")
     val geometries: List<String>? = null
 )
 
 /**
- * Represents the placement on a specific road link sequence.
+ * Represents a line segment in stedfesting (StedfestingLinjer type).
+ * The id field in the JSON is actually a veglenkesekvensId.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class VeglenkeStedfesting(
-    @JsonProperty("veglenkesekvensid")
+data class StedfestingLinje(
+    @JsonProperty("id")
     val veglenkesekvensId: Long? = null,
 
     @JsonProperty("startposisjon")
