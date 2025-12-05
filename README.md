@@ -1,6 +1,6 @@
 # kafka-at-home
 
-A Spring Boot 3 application using Kotlin and Kafka Streams to consume and transform road data from the NVDB (Norwegian Road Database) Uberiket API.
+A Spring Boot 4 application using Kotlin and Kafka Streams to consume and transform road data from the NVDB (Norwegian Road Database) Uberiket API.
 
 ## Overview
 
@@ -19,7 +19,7 @@ The application supports fetching various road object types from NVDB:
 
 ## Technology Stack
 
-- **Spring Boot 3.2** - Application framework
+- **Spring Boot 4** - Application framework
 - **Kotlin** - Programming language
 - **Gradle (Kotlin DSL)** - Build tool
 - **Apache Kafka Streams** - Stream processing
@@ -29,7 +29,7 @@ The application supports fetching various road object types from NVDB:
 
 ### Prerequisites
 
-- Java 17 or later
+- Java 21 or later
 - Docker and Docker Compose (for local Kafka)
 
 ### Running Locally

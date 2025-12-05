@@ -7,11 +7,11 @@ plugins {
     kotlin("plugin.spring") version "2.2.20"
 }
 
-group = "no.geirsagberg"
+group = "no.vegvesen.nvdb.kafka"
 version = "0.0.1-SNAPSHOT"
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
 }
 
 repositories {
@@ -29,13 +29,13 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.3")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0")
     runtimeOnly("org.xerial:sqlite-jdbc")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
     testImplementation("org.apache.kafka:kafka-streams-test-utils")
-    testImplementation("io.mockk:mockk:1.13.13")
+    testImplementation("io.mockk:mockk:1.14.6")
 }
 
 tasks.withType<KotlinCompile> {

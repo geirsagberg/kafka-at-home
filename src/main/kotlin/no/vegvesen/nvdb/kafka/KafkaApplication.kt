@@ -6,8 +6,8 @@ import org.springframework.scheduling.annotation.EnableScheduling
 
 @SpringBootApplication
 @EnableScheduling
-class KafkaAtHomeApplication
+class KafkaApplication
 
 fun main(args: Array<String>) {
-    runApplication<KafkaAtHomeApplication>(*args)
+    runApplication<KafkaApplication>(*args)
 }
