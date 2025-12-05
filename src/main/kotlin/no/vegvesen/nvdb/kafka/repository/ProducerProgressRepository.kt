@@ -1,7 +1,7 @@
-package no.geirsagberg.kafkaathome.repository
+package no.vegvesen.nvdb.kafka.repository
 
-import no.geirsagberg.kafkaathome.model.ProducerMode
-import no.geirsagberg.kafkaathome.model.ProducerProgress
+import no.vegvesen.nvdb.kafka.model.ProducerMode
+import no.vegvesen.nvdb.kafka.model.ProducerProgress
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.time.Instant

@@ -1,10 +1,9 @@
-package no.geirsagberg.kafkaathome.stream
+package no.vegvesen.nvdb.kafka.stream
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import no.geirsagberg.kafkaathome.model.Egenskap
-import no.geirsagberg.kafkaathome.model.EgenskapValue
-import no.geirsagberg.kafkaathome.model.Geometri
-import no.geirsagberg.kafkaathome.model.Vegobjekt
+import no.vegvesen.nvdb.kafka.model.EgenskapValue
+import no.vegvesen.nvdb.kafka.model.Geometri
+import no.vegvesen.nvdb.kafka.model.Vegobjekt
 import org.apache.kafka.common.serialization.Serdes
 import org.apache.kafka.streams.*
 import org.junit.jupiter.api.AfterEach
@@ -30,17 +29,17 @@ class NvdbStreamTopologyTest {
         props[StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG] = Serdes.String().javaClass.name
 
         val builder = StreamsBuilder()
-        
+
         // Build topology manually for testing
         val inputStream = builder.stream<String, String>("nvdb-vegobjekter-raw")
-        
+
         val transformedStream = inputStream
             .mapValues { value -> transformVegobjekt(value) }
             .filter { _, value -> value != null }
             .mapValues { value -> value!! }
 
         transformedStream.to("nvdb-vegobjekter-transformed")
-        
+
         transformedStream
             .filter { _, value -> isSpeedLimit(value) }
             .to("nvdb-fartsgrenser")
@@ -90,7 +89,7 @@ class NvdbStreamTopologyTest {
         // Then
         val output = outputTopic.readValue()
         assertNotNull(output)
-        
+
         val outputNode = objectMapper.readTree(output)
         assertEquals(12345L, outputNode.get("id").asLong())
         assertEquals(105, outputNode.get("typeId").asInt())
@@ -114,7 +113,7 @@ class NvdbStreamTopologyTest {
         // Then
         val speedLimitOutput = speedLimitsTopic.readValue()
         assertNotNull(speedLimitOutput)
-        
+
         val outputNode = objectMapper.readTree(speedLimitOutput)
         assertEquals(105, outputNode.get("typeId").asInt())
     }
@@ -149,7 +148,7 @@ class NvdbStreamTopologyTest {
         // Should be in output topic
         val output = outputTopic.readValue()
         assertNotNull(output)
-        
+
         // Should NOT be in speed limits topic
         assertTrue(speedLimitsTopic.isEmpty)
     }
@@ -185,10 +184,10 @@ class NvdbStreamTopologyTest {
 
     @Test
     fun `should preserve stedfesting with geometries field`() {
-        val stedfesting = no.geirsagberg.kafkaathome.model.Stedfesting(
+        val stedfesting = no.vegvesen.nvdb.kafka.model.Stedfesting(
             type = "StedfestingLinjer",
             linjer = listOf(
-                no.geirsagberg.kafkaathome.model.StedfestingLinje(
+                no.vegvesen.nvdb.kafka.model.StedfestingLinje(
                     veglenkesekvensId = 1L,
                     startposisjon = 0.0,
                     sluttposisjon = 1.0

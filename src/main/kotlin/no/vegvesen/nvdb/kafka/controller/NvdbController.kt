@@ -1,17 +1,15 @@
-package no.geirsagberg.kafkaathome.controller
+package no.vegvesen.nvdb.kafka.controller
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
-import kotlinx.coroutines.runBlocking
-import no.geirsagberg.kafkaathome.api.NvdbApiClient
-import no.geirsagberg.kafkaathome.stream.NvdbDataProducer
+import no.vegvesen.nvdb.kafka.api.NvdbApiClient
+import no.vegvesen.nvdb.kafka.stream.NvdbDataProducer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
-import reactor.core.publisher.Mono
 import java.time.Instant
 
 /**
@@ -39,32 +37,36 @@ class NvdbController(
         ]
     )
     @PostMapping("/backfill/{typeId}/start")
-    fun startBackfill(
+    suspend fun startBackfill(
         @Parameter(description = "NVDB vegobjekttype ID (915 for Vegsystem, 916 for Strekning)", example = "915")
         @PathVariable typeId: Int
-    ): Mono<ResponseEntity<BackfillControlResponse>> {
-        return if (nvdbDataProducer != null) {
-            Mono.fromCallable {
-                runBlocking { nvdbDataProducer.startBackfill(typeId) }
-                ResponseEntity.ok(BackfillControlResponse(
+    ): ResponseEntity<BackfillControlResponse> = if (nvdbDataProducer != null) {
+        try {
+            nvdbDataProducer.startBackfill(typeId)
+            ResponseEntity.ok(
+                BackfillControlResponse(
                     typeId = typeId,
                     action = "started",
                     message = "Backfill started for type $typeId"
-                ))
-            }.onErrorResume { error ->
-                Mono.just(ResponseEntity.badRequest().body(BackfillControlResponse(
+                )
+            )
+        } catch (exception: Exception) {
+            ResponseEntity.badRequest().body(
+                BackfillControlResponse(
                     typeId = typeId,
                     action = "start_failed",
-                    message = "Failed to start backfill: ${error.message}"
-                )))
-            }
-        } else {
-            Mono.just(ResponseEntity.status(503).body(BackfillControlResponse(
+                    message = "Failed to start backfill: ${exception.message}"
+                )
+            )
+        }
+    } else {
+        ResponseEntity.status(503).body(
+            BackfillControlResponse(
                 typeId = typeId,
                 action = "unavailable",
                 message = "Producer is disabled"
-            )))
-        }
+            )
+        )
     }
 
     /**
@@ -84,23 +86,23 @@ class NvdbController(
     fun stopBackfill(
         @Parameter(description = "NVDB vegobjekttype ID", example = "915")
         @PathVariable typeId: Int
-    ): Mono<ResponseEntity<BackfillControlResponse>> {
-        return if (nvdbDataProducer != null) {
-            Mono.fromCallable {
-                nvdbDataProducer.stopBackfill(typeId)
-                ResponseEntity.ok(BackfillControlResponse(
-                    typeId = typeId,
-                    action = "stopped",
-                    message = "Backfill stopped for type $typeId"
-                ))
-            }
-        } else {
-            Mono.just(ResponseEntity.status(503).body(BackfillControlResponse(
+    ): ResponseEntity<BackfillControlResponse> = if (nvdbDataProducer != null) {
+        nvdbDataProducer.stopBackfill(typeId)
+        ResponseEntity.ok(
+            BackfillControlResponse(
+                typeId = typeId,
+                action = "stopped",
+                message = "Backfill stopped for type $typeId"
+            )
+        )
+    } else {
+        ResponseEntity.status(503).body(
+            BackfillControlResponse(
                 typeId = typeId,
                 action = "unavailable",
                 message = "Producer is disabled"
-            )))
-        }
+            )
+        )
     }
 
     /**
@@ -118,32 +120,36 @@ class NvdbController(
         ]
     )
     @PostMapping("/backfill/{typeId}/reset")
-    fun resetBackfill(
+    suspend fun resetBackfill(
         @Parameter(description = "NVDB vegobjekttype ID", example = "915")
         @PathVariable typeId: Int
-    ): Mono<ResponseEntity<BackfillControlResponse>> {
-        return if (nvdbDataProducer != null) {
-            Mono.fromCallable {
-                runBlocking { nvdbDataProducer.resetBackfill(typeId) }
-                ResponseEntity.ok(BackfillControlResponse(
+    ): ResponseEntity<BackfillControlResponse> = if (nvdbDataProducer != null) {
+        try {
+            nvdbDataProducer.resetBackfill(typeId)
+            ResponseEntity.ok(
+                BackfillControlResponse(
                     typeId = typeId,
                     action = "reset",
                     message = "Backfill reset and restarted for type $typeId"
-                ))
-            }.onErrorResume { error ->
-                Mono.just(ResponseEntity.badRequest().body(BackfillControlResponse(
+                )
+            )
+        } catch (error: Exception) {
+            ResponseEntity.badRequest().body(
+                BackfillControlResponse(
                     typeId = typeId,
                     action = "reset_failed",
                     message = "Failed to reset backfill: ${error.message}"
-                )))
-            }
-        } else {
-            Mono.just(ResponseEntity.status(503).body(BackfillControlResponse(
+                )
+            )
+        }
+    } else {
+        ResponseEntity.status(503).body(
+            BackfillControlResponse(
                 typeId = typeId,
                 action = "unavailable",
                 message = "Producer is disabled"
-            )))
-        }
+            )
+        )
     }
 
     /**
@@ -163,36 +169,38 @@ class NvdbController(
     fun getTypeStatus(
         @Parameter(description = "NVDB vegobjekttype ID", example = "915")
         @PathVariable typeId: Int
-    ): Mono<ResponseEntity<TypeStatusResponse>> {
-        return if (nvdbDataProducer != null) {
-            Mono.fromCallable {
-                val progress = nvdbDataProducer.getStatus(typeId)
-                if (progress != null) {
-                    ResponseEntity.ok(TypeStatusResponse(
-                        typeId = typeId,
-                        mode = progress.mode.name,
-                        lastProcessedId = progress.lastProcessedId,
-                        hendelseId = progress.hendelseId,
-                        backfillStartTime = progress.backfillStartTime,
-                        backfillCompletionTime = progress.backfillCompletionTime,
-                        lastError = progress.lastError,
-                        updatedAt = progress.updatedAt
-                    ))
-                } else {
-                    ResponseEntity.ok(TypeStatusResponse(
-                        typeId = typeId,
-                        mode = "NOT_INITIALIZED",
-                        lastProcessedId = null,
-                        hendelseId = null,
-                        backfillStartTime = null,
-                        backfillCompletionTime = null,
-                        lastError = null,
-                        updatedAt = null
-                    ))
-                }
-            }
+    ): ResponseEntity<TypeStatusResponse> = if (nvdbDataProducer != null) {
+        val progress = nvdbDataProducer.getStatus(typeId)
+        if (progress != null) {
+            ResponseEntity.ok(
+                TypeStatusResponse(
+                    typeId = typeId,
+                    mode = progress.mode.name,
+                    lastProcessedId = progress.lastProcessedId,
+                    hendelseId = progress.hendelseId,
+                    backfillStartTime = progress.backfillStartTime,
+                    backfillCompletionTime = progress.backfillCompletionTime,
+                    lastError = progress.lastError,
+                    updatedAt = progress.updatedAt
+                )
+            )
         } else {
-            Mono.just(ResponseEntity.status(503).body(TypeStatusResponse(
+            ResponseEntity.ok(
+                TypeStatusResponse(
+                    typeId = typeId,
+                    mode = "NOT_INITIALIZED",
+                    lastProcessedId = null,
+                    hendelseId = null,
+                    backfillStartTime = null,
+                    backfillCompletionTime = null,
+                    lastError = null,
+                    updatedAt = null
+                )
+            )
+        }
+    } else {
+        ResponseEntity.status(503).body(
+            TypeStatusResponse(
                 typeId = typeId,
                 mode = "PRODUCER_DISABLED",
                 lastProcessedId = null,
@@ -201,8 +209,8 @@ class NvdbController(
                 backfillCompletionTime = null,
                 lastError = null,
                 updatedAt = null
-            )))
-        }
+            )
+        )
     }
 
     /**
@@ -223,28 +231,32 @@ class NvdbController(
             val type915 = nvdbDataProducer.getStatus(NvdbApiClient.TYPE_VEGSYSTEM)
             val type916 = nvdbDataProducer.getStatus(NvdbApiClient.TYPE_STREKNING)
 
-            ResponseEntity.ok(OverallStatusResponse(
-                status = "running",
-                types = listOf(
-                    TypeSummary(
-                        typeId = NvdbApiClient.TYPE_VEGSYSTEM,
-                        name = "Vegsystem",
-                        mode = type915?.mode?.name ?: "NOT_INITIALIZED",
-                        topic = "nvdb-vegobjekter-915"
-                    ),
-                    TypeSummary(
-                        typeId = NvdbApiClient.TYPE_STREKNING,
-                        name = "Strekning",
-                        mode = type916?.mode?.name ?: "NOT_INITIALIZED",
-                        topic = "nvdb-vegobjekter-916"
+            ResponseEntity.ok(
+                OverallStatusResponse(
+                    status = "running",
+                    types = listOf(
+                        TypeSummary(
+                            typeId = NvdbApiClient.TYPE_VEGSYSTEM,
+                            name = "Vegsystem",
+                            mode = type915?.mode?.name ?: "NOT_INITIALIZED",
+                            topic = "nvdb-vegobjekter-915"
+                        ),
+                        TypeSummary(
+                            typeId = NvdbApiClient.TYPE_STREKNING,
+                            name = "Strekning",
+                            mode = type916?.mode?.name ?: "NOT_INITIALIZED",
+                            topic = "nvdb-vegobjekter-916"
+                        )
                     )
                 )
-            ))
+            )
         } else {
-            ResponseEntity.ok(OverallStatusResponse(
-                status = "disabled",
-                types = emptyList()
-            ))
+            ResponseEntity.ok(
+                OverallStatusResponse(
+                    status = "disabled",
+                    types = emptyList()
+                )
+            )
         }
     }
 }

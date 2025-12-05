@@ -1,4 +1,4 @@
-package no.geirsagberg.kafkaathome.config
+package no.vegvesen.nvdb.kafka.config
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 

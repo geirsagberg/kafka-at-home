@@ -1,4 +1,4 @@
-package no.geirsagberg.kafkaathome.model
+package no.vegvesen.nvdb.kafka.model
 
 import java.time.Instant
 

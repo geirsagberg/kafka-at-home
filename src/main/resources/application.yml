@@ -33,7 +33,7 @@ nvdb:
   api:
     base-url: ${NVDB_API_BASE_URL:https://nvdbapiles.atlas.vegvesen.no/uberiket/api/v1/}
   producer:
-    enabled: ${NVDB_PRODUCER_ENABLED:false}
+    enabled: ${NVDB_PRODUCER_ENABLED:true}
     backfill:
       batch-size: ${NVDB_BACKFILL_BATCH_SIZE:100}
     updates:
@@ -41,22 +41,12 @@ nvdb:
     schedule:
       type915: ${NVDB_SCHEDULE_TYPE915:60000}  # 1 minute
       type916: ${NVDB_SCHEDULE_TYPE916:60000}  # 1 minute
-  enrichment:
-    enabled: ${NVDB_ENRICHMENT_ENABLED:false}
-    batch-size: ${NVDB_ENRICHMENT_BATCH_SIZE:1000}
-
-# Kafka Topics Configuration
-kafka:
-  topics:
-    input: nvdb-vegobjekter-raw
-    output: nvdb-vegobjekter-transformed
-    speedlimits: nvdb-fartsgrenser
 
 # Logging Configuration
 logging:
   level:
     root: INFO
-    no.geirsagberg.kafkaathome: DEBUG
+    no.vegvesen.nvdb.kafka: DEBUG
     org.apache.kafka: WARN
     org.springframework.kafka: INFO
 

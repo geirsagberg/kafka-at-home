@@ -1,26 +1,17 @@
-package no.geirsagberg.kafkaathome.stream
+package no.vegvesen.nvdb.kafka.stream
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import no.geirsagberg.kafkaathome.model.Vegobjekt
-import no.geirsagberg.kafkaathome.service.GeometryEnrichmentService
+import no.vegvesen.nvdb.kafka.model.Vegobjekt
+import no.vegvesen.nvdb.kafka.service.GeometryEnrichmentService
 import org.apache.kafka.common.serialization.Serdes
 import org.apache.kafka.streams.StreamsBuilder
 import org.apache.kafka.streams.kstream.Consumed
 import org.apache.kafka.streams.kstream.KStream
 import org.apache.kafka.streams.kstream.Produced
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
-/**
- * Kafka Streams topology for processing NVDB road data.
- *
- * This topology:
- * 1. Consumes raw road object data from the input topic
- * 2. Transforms the data (e.g., extracts speed limits, enriches with geometry)
- * 3. Produces transformed data to output topics
- */
 @Configuration
 class NvdbStreamTopology(
     private val objectMapper: ObjectMapper,
@@ -28,23 +19,15 @@ class NvdbStreamTopology(
 ) {
     private val logger = LoggerFactory.getLogger(NvdbStreamTopology::class.java)
 
-    @Value($$"${kafka.topics.input:nvdb-vegobjekter-raw}")
-    private lateinit var inputTopic: String
+    private val vegsystemTopic = "nvdb-vegobjekter-915"
 
-    @Value($$"${kafka.topics.output:nvdb-vegobjekter-transformed}")
-    private lateinit var outputTopic: String
+    private val strekningTopic = "nvdb-vegobjekter-916"
 
-    @Value($$"${kafka.topics.speedlimits:nvdb-fartsgrenser}")
-    private lateinit var speedLimitsTopic: String
-
-    @Value($$"${nvdb.enrichment.enabled:false}")
-    private var enrichmentEnabled: Boolean = false
 
     @Bean
     fun nvdbStreamsTopology(streamsBuilder: StreamsBuilder): KStream<String, String> {
-        logger.info("Building NVDB Kafka Streams topology (enrichment: {})", enrichmentEnabled)
+        logger.info("Building NVDB Kafka Streams topology")
 
-        // Consume raw road object data
         val inputStream: KStream<String, String> = streamsBuilder.stream(
             inputTopic,
             Consumed.with(Serdes.String(), Serdes.String())

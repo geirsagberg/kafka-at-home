@@ -1,8 +1,10 @@
-package no.geirsagberg.kafkaathome.service
+package no.vegvesen.nvdb.kafka.service
 
-import io.mockk.*
-import no.geirsagberg.kafkaathome.api.NvdbApiClient
-import no.geirsagberg.kafkaathome.model.*
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import no.vegvesen.nvdb.kafka.api.NvdbApiClient
+import no.vegvesen.nvdb.kafka.model.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

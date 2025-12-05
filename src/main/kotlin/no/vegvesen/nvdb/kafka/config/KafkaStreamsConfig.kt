@@ -1,5 +1,6 @@
-package no.geirsagberg.kafkaathome.config
+package no.vegvesen.nvdb.kafka.config
 
+import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.common.serialization.Serdes
 import org.apache.kafka.streams.StreamsConfig
 import org.springframework.beans.factory.annotation.Value
@@ -8,6 +9,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.annotation.EnableKafkaStreams
 import org.springframework.kafka.annotation.KafkaStreamsDefaultConfiguration
 import org.springframework.kafka.config.KafkaStreamsConfiguration
+import org.springframework.kafka.config.TopicBuilder
 import org.springframework.kafka.core.DefaultKafkaProducerFactory
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.core.ProducerFactory
@@ -21,6 +23,12 @@ class KafkaStreamsConfig {
 
     @Value("\${spring.kafka.streams.application-id}")
     private lateinit var applicationId: String
+
+    @Value("\${kafka.topics.partitions:100}")
+    private var topicPartitions: Int = 100
+
+    @Value("\${kafka.topics.replicas:1}")
+    private var topicReplicas: Short = 1
 
     @Bean(name = [KafkaStreamsDefaultConfiguration.DEFAULT_STREAMS_CONFIG_BEAN_NAME])
     fun kafkaStreamsConfig(): KafkaStreamsConfiguration {
@@ -37,9 +45,9 @@ class KafkaStreamsConfig {
     fun producerFactory(): ProducerFactory<String, String> {
         val configProps = mutableMapOf<String, Any>()
         configProps[org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG] = bootstrapServers
-        configProps[org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG] = 
+        configProps[org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG] =
             org.apache.kafka.common.serialization.StringSerializer::class.java
-        configProps[org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG] = 
+        configProps[org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG] =
             org.apache.kafka.common.serialization.StringSerializer::class.java
         return DefaultKafkaProducerFactory(configProps)
     }
@@ -47,5 +55,29 @@ class KafkaStreamsConfig {
     @Bean
     fun kafkaTemplate(): KafkaTemplate<String, String> {
         return KafkaTemplate(producerFactory())
+    }
+
+    @Bean
+    fun vegsystemTopic(): NewTopic {
+        return TopicBuilder.name("nvdb-vegobjekter-915")
+            .partitions(topicPartitions)
+            .replicas(topicReplicas.toInt())
+            .build()
+    }
+
+    @Bean
+    fun strekningTopic(): NewTopic {
+        return TopicBuilder.name("nvdb-vegobjekter-916")
+            .partitions(topicPartitions)
+            .replicas(topicReplicas.toInt())
+            .build()
+    }
+
+    @Bean
+    fun transformedTopic(): NewTopic {
+        return TopicBuilder.name("nvdb-vegobjekter-transformed")
+            .partitions(topicPartitions)
+            .replicas(topicReplicas.toInt())
+            .build()
     }
 }

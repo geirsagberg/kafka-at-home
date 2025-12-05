@@ -42,4 +42,4 @@ kafka:
 logging:
   level:
     root: WARN
-    no.geirsagberg.kafkaathome: DEBUG
+    no.vegvesen.nvdb.kafka: DEBUG

@@ -1,9 +1,9 @@
-package no.geirsagberg.kafkaathome.api
+package no.vegvesen.nvdb.kafka.api
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.toList
-import no.geirsagberg.kafkaathome.model.Vegobjekt
-import no.geirsagberg.kafkaathome.model.Veglenke
+import no.vegvesen.nvdb.kafka.model.Veglenke
+import no.vegvesen.nvdb.kafka.model.Vegobjekt
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
@@ -142,7 +142,7 @@ class NvdbApiClient(private val nvdbWebClient: WebClient) {
                         .build()
                 }
                 .retrieve()
-                .awaitBody<no.geirsagberg.kafkaathome.model.VegobjektHendelserResponse>()
+                .awaitBody<no.vegvesen.nvdb.kafka.model.VegobjektHendelserResponse>()
 
             response.hendelser.firstOrNull()?.hendelseId
         } catch (e: Exception) {
@@ -163,7 +163,7 @@ class NvdbApiClient(private val nvdbWebClient: WebClient) {
         typeId: Int,
         startHendelseId: Long? = null,
         antall: Int = 1000
-    ): no.geirsagberg.kafkaathome.model.VegobjektHendelserResponse {
+    ): no.vegvesen.nvdb.kafka.model.VegobjektHendelserResponse {
         logger.debug("Fetching hendelser for type {} (start: {})", typeId, startHendelseId)
         return nvdbWebClient.get()
             .uri { uriBuilder ->

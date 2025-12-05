@@ -1,9 +1,10 @@
-package no.geirsagberg.kafkaathome.service
+package no.vegvesen.nvdb.kafka.service
 
-import no.geirsagberg.kafkaathome.api.NvdbApiClient
-import no.geirsagberg.kafkaathome.model.Vegobjekt
+import no.vegvesen.nvdb.kafka.api.NvdbApiClient
+import no.vegvesen.nvdb.kafka.model.Vegobjekt
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import kotlin.collections.mapNotNull
 
 @Service
 class GeometryEnrichmentService(

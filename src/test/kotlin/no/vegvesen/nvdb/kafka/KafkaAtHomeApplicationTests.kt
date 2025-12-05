@@ -1,4 +1,4 @@
-package no.geirsagberg.kafkaathome
+package no.vegvesen.nvdb.kafka
 
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest

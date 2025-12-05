@@ -1,14 +1,14 @@
-package no.geirsagberg.kafkaathome.stream
+package no.vegvesen.nvdb.kafka.stream
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.flow.count
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
-import no.geirsagberg.kafkaathome.api.NvdbApiClient
-import no.geirsagberg.kafkaathome.model.ProducerMode
-import no.geirsagberg.kafkaathome.model.ProducerProgress
-import no.geirsagberg.kafkaathome.model.Vegobjekt
-import no.geirsagberg.kafkaathome.repository.ProducerProgressRepository
+import no.vegvesen.nvdb.kafka.api.NvdbApiClient
+import no.vegvesen.nvdb.kafka.model.ProducerMode
+import no.vegvesen.nvdb.kafka.model.ProducerProgress
+import no.vegvesen.nvdb.kafka.model.Vegobjekt
+import no.vegvesen.nvdb.kafka.repository.ProducerProgressRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -34,13 +34,13 @@ class NvdbDataProducer(
 ) {
     private val logger = LoggerFactory.getLogger(NvdbDataProducer::class.java)
 
-    @Value("\${nvdb.producer.enabled:false}")
+    @Value($$"${nvdb.producer.enabled:false}")
     private var producerEnabled: Boolean = false
 
-    @Value("\${nvdb.producer.backfill.batch-size:100}")
+    @Value($$"${nvdb.producer.backfill.batch-size:100}")
     private var backfillBatchSize: Int = 100
 
-    @Value("\${nvdb.producer.updates.batch-size:100}")
+    @Value($$"${nvdb.producer.updates.batch-size:100}")
     private var updatesBatchSize: Int = 100
 
     private val isProcessingType915 = AtomicBoolean(false)
@@ -50,7 +50,7 @@ class NvdbDataProducer(
      * Scheduled task for type 915 (Vegsystem).
      * Runs every minute, but actual work depends on mode.
      */
-    @Scheduled(fixedRateString = "\${nvdb.producer.schedule.type915:60000}")
+    @Scheduled(fixedRateString = $$"${nvdb.producer.schedule.type915:60000}")
     fun processType915() {
         if (!producerEnabled) return
         if (!isProcessingType915.compareAndSet(false, true)) {
@@ -69,7 +69,7 @@ class NvdbDataProducer(
      * Scheduled task for type 916 (Strekning).
      * Runs every minute, but actual work depends on mode.
      */
-    @Scheduled(fixedRateString = "\${nvdb.producer.schedule.type916:60000}")
+    @Scheduled(fixedRateString = $$"${nvdb.producer.schedule.type916:60000}")
     fun processType916() {
         if (!producerEnabled) return
         if (!isProcessingType916.compareAndSet(false, true)) {
@@ -95,10 +95,12 @@ class NvdbDataProducer(
                 logger.info("Processing type {} in BACKFILL mode", typeId)
                 runBackfillBatch(typeId, progress)
             }
+
             ProducerMode.UPDATES -> {
                 logger.info("Processing type {} in UPDATES mode", typeId)
                 runUpdatesCheck(typeId, progress)
             }
+
             null -> {
                 logger.debug("Type {} not initialized, skipping", typeId)
             }
@@ -127,8 +129,10 @@ class NvdbDataProducer(
                     updatedAt = Instant.now()
                 )
                 progressRepository.save(newProgress)
-                logger.info("Backfill batch for type {}: processed {} items, last ID = {}",
-                    typeId, count, lastId.get())
+                logger.info(
+                    "Backfill batch for type {}: processed {} items, last ID = {}",
+                    typeId, count, lastId.get()
+                )
             }
 
             // Check if backfill is complete (batch < batch size)
@@ -139,10 +143,12 @@ class NvdbDataProducer(
 
         } catch (e: Exception) {
             logger.error("Error during backfill for type {}: {}", typeId, e.message, e)
-            progressRepository.save(progress.copy(
-                lastError = e.message,
-                updatedAt = Instant.now()
-            ))
+            progressRepository.save(
+                progress.copy(
+                    lastError = e.message,
+                    updatedAt = Instant.now()
+                )
+            )
         }
     }
 
@@ -164,8 +170,10 @@ class NvdbDataProducer(
             updatedAt = Instant.now()
         )
         progressRepository.save(updatedProgress)
-        logger.info("Transitioned type {} to UPDATES mode, starting from hendelse ID {}",
-            typeId, latestHendelseId)
+        logger.info(
+            "Transitioned type {} to UPDATES mode, starting from hendelse ID {}",
+            typeId, latestHendelseId
+        )
     }
 
     /**
@@ -197,8 +205,10 @@ class NvdbDataProducer(
                     produceToKafka(typeId, vegobjekt)
                     lastHendelseId = hendelse.hendelseId
                 } catch (e: Exception) {
-                    logger.error("Error fetching vegobjekt {} for hendelse {}: {}",
-                        hendelse.vegobjektId, hendelse.hendelseId, e.message)
+                    logger.error(
+                        "Error fetching vegobjekt {} for hendelse {}: {}",
+                        hendelse.vegobjektId, hendelse.hendelseId, e.message
+                    )
                     // Continue processing other hendelser
                 }
             }
@@ -213,10 +223,12 @@ class NvdbDataProducer(
 
         } catch (e: Exception) {
             logger.error("Error during updates check for type {}: {}", typeId, e.message, e)
-            progressRepository.save(progress.copy(
-                lastError = e.message,
-                updatedAt = Instant.now()
-            ))
+            progressRepository.save(
+                progress.copy(
+                    lastError = e.message,
+                    updatedAt = Instant.now()
+                )
+            )
         }
     }
 
@@ -288,10 +300,13 @@ class NvdbDataProducer(
             kafkaTemplate.send(topic, key, value)
                 .whenComplete { result, ex ->
                     if (ex != null) {
-                        logger.error("Failed to produce vegobjekt {} to topic {}: {}",
-                            vegobjekt.id, topic, ex.message)
+                        logger.error(
+                            "Failed to produce vegobjekt {} to topic {}: {}",
+                            vegobjekt.id, topic, ex.message
+                        )
                     } else {
-                        logger.debug("Produced vegobjekt {} to topic {} partition {}",
+                        logger.debug(
+                            "Produced vegobjekt {} to topic {} partition {}",
                             vegobjekt.id,
                             topic,
                             result?.recordMetadata?.partition()

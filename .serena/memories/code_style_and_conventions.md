@@ -10,8 +10,9 @@
 ## Code Organization
 
 ### Package Structure
+
 ```
-no.geirsagberg.kafkaathome/
+no.vegvesen.nvdb.kafka/
 ├── api/          - External API clients
 ├── config/       - Configuration classes
 ├── controller/   - REST API endpoints
@@ -33,6 +34,7 @@ no.geirsagberg.kafkaathome/
 - Document class-level purpose with KDoc
 
 Example:
+
 ```kotlin
 /**
  * REST controller for managing NVDB data ingestion and Kafka operations.
@@ -52,6 +54,7 @@ class NvdbController(...)
 - Use constructor injection (preferred in Spring)
 - Mark optional dependencies with `@Autowired(required = false)` if needed
 - Example:
+
 ```kotlin
 class NvdbController(
     @Autowired(required = false) private val nvdbDataProducer: NvdbDataProducer?,
