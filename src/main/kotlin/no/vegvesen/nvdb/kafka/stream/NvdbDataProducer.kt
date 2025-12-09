@@ -77,14 +77,24 @@ class NvdbDataProducer(
 
     /**
      * Main processing logic: delegates to backfill or updates based on current mode.
+     * In BACKFILL mode, continues processing batches until completion or error.
      */
     private suspend fun processType(typeId: Int) {
-        val progress = progressRepository.findByTypeId(typeId)
+        var progress = progressRepository.findByTypeId(typeId)
 
         when (progress?.mode) {
             ProducerMode.BACKFILL -> {
                 logger.info("Processing type {} in BACKFILL mode", typeId)
-                runBackfillBatch(typeId, progress)
+                while (progress?.mode == ProducerMode.BACKFILL) {
+                    progress = runBackfillBatch(typeId, progress)
+                    if (progress.lastError != null) {
+                        logger.warn("Stopping backfill for type {} due to error: {}", typeId, progress.lastError)
+                        break
+                    }
+                }
+                if (progress.mode != ProducerMode.BACKFILL) {
+                    logger.info("Type {} backfill complete, now in {} mode", typeId, progress.mode)
+                }
             }
 
             ProducerMode.UPDATES -> {
@@ -128,6 +138,7 @@ class NvdbDataProducer(
                 val updatedProgress = progress.copy(
                     mode = ProducerMode.UPDATES,
                     backfillCompletionTime = now(),
+                    lastError = null,
                     updatedAt = now()
                 )
                 progressRepository.save(updatedProgress)
@@ -141,6 +152,7 @@ class NvdbDataProducer(
 
             val newProgress = progress.copy(
                 lastProcessedId = lastId!!,
+                lastError = null,
                 updatedAt = now()
             )
             progressRepository.save(newProgress)
