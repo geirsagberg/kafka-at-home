@@ -103,10 +103,23 @@ val generateUberiketApi by tasks.registering(org.openapitools.generator.gradle.p
         )
     )
 
+    typeMappings.set(
+        mapOf(
+            "AnyType" to "JsonElement",
+            "object" to "JsonElement"
+        )
+    )
+
+    importMappings.set(
+        mapOf(
+            "JsonElement" to "kotlinx.serialization.json.JsonElement"
+        )
+    )
+
     configOptions.set(
         mapOf(
             "dateLibrary" to "kotlinx-datetime",
-            "serializationLibrary" to "kotlinx_serialization",
+            "serializationLibrary" to "kotlinx_serialization"
         )
     )
 

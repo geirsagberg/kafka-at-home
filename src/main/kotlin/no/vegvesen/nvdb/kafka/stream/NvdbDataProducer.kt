@@ -1,9 +1,6 @@
 package no.vegvesen.nvdb.kafka.stream
 
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.future.asDeferred
-import kotlinx.coroutines.runBlocking
+import io.github.nomisRev.kafka.publisher.KafkaPublisher
 import no.vegvesen.nvdb.api.uberiket.model.EnumEgenskap
 import no.vegvesen.nvdb.api.uberiket.model.HeltallEgenskap
 import no.vegvesen.nvdb.api.uberiket.model.StedfestingLinjer
@@ -12,16 +9,15 @@ import no.vegvesen.nvdb.kafka.api.NvdbApiClient
 import no.vegvesen.nvdb.kafka.extensions.associate
 import no.vegvesen.nvdb.kafka.model.*
 import no.vegvesen.nvdb.kafka.repository.ProducerProgressRepository
+import org.apache.kafka.clients.producer.ProducerRecord
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
-import org.springframework.kafka.core.KafkaTemplate
-import org.springframework.kafka.support.SendResult
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import java.time.Instant.now
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
+import no.vegvesen.nvdb.api.uberiket.model.Vegobjekt as ApiVegobjekt
 
 /**
  * Service that manages NVDB data ingestion with two operational modes:
@@ -32,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 @ConditionalOnProperty(name = ["nvdb.producer.enabled"], havingValue = "true")
 class NvdbDataProducer(
     private val nvdbApiClient: NvdbApiClient,
-    private val vegobjektDeltaKafkaTemplate: KafkaTemplate<Long, VegobjektDelta>,
+    private val kafkaPublisher: KafkaPublisher<Long, VegobjektDelta>,
     private val progressRepository: ProducerProgressRepository
 ) {
     private val logger = LoggerFactory.getLogger(NvdbDataProducer::class.java)
@@ -109,16 +105,26 @@ class NvdbDataProducer(
     private suspend fun runBackfillBatch(typeId: Int, progress: ProducerProgress): ProducerProgress {
         try {
             val start = progress.lastProcessedId
-            val futures = mutableListOf<Pair<Long, CompletableFuture<SendResult<Long, VegobjektDelta>>>>()
+            val topic = NvdbApiClient.getTopicNameForType(typeId)
+            var lastId: Long? = null
+            var count = 0
 
-            nvdbApiClient.streamVegobjekter(typeId, backfillBatchSize, start)
-                .collect { apiVegobjekt ->
-                    val vegobjekt = toDomain(apiVegobjekt)
-                    val future = produceToKafka(typeId, before = null, after = vegobjekt)
-                    futures.add(vegobjekt.vegobjektId to future)
-                }
+            // publishScope automatically awaits all sends before returning
+            kafkaPublisher.publishScope {
+                nvdbApiClient.streamVegobjekter(typeId, backfillBatchSize, start)
+                    .collect { apiVegobjekt ->
+                        val vegobjekt = toDomain(apiVegobjekt)
+                        val delta = VegobjektDelta(before = null, after = vegobjekt)
 
-            if (futures.isEmpty()) {
+                        offer(ProducerRecord(topic, vegobjekt.vegobjektId, delta))
+
+                        lastId = vegobjekt.vegobjektId
+                        count++
+                    }
+            }
+            // All sends acknowledged by this point (at-least-once guaranteed)
+
+            if (count == 0) {
                 val updatedProgress = progress.copy(
                     mode = ProducerMode.UPDATES,
                     backfillCompletionTime = now(),
@@ -133,17 +139,14 @@ class NvdbDataProducer(
                 return updatedProgress
             }
 
-            futures.map { it.second.asDeferred() }.awaitAll()
-
-            val lastId = futures.last().first
             val newProgress = progress.copy(
-                lastProcessedId = lastId,
+                lastProcessedId = lastId!!,
                 updatedAt = now()
             )
             progressRepository.save(newProgress)
             logger.info(
                 "Backfill batch for type {}: processed {} items, last ID = {}",
-                typeId, futures.size, lastId
+                typeId, count, lastId
             )
             return newProgress
 
@@ -158,79 +161,91 @@ class NvdbDataProducer(
         }
     }
 
-    private fun toDomain(apiVegobjekt: no.vegvesen.nvdb.api.uberiket.model.Vegobjekt): Vegobjekt {
-        val vegobjekt = Vegobjekt(
-            vegobjektId = apiVegobjekt.id,
-            vegobjektType = apiVegobjekt.typeId,
-            egenskaper = apiVegobjekt.egenskaper!!.associate { (key, value) ->
-                key.toInt() to when (value) {
-                    is HeltallEgenskap -> value.verdi.toString()
-                    is TekstEgenskap -> value.verdi
-                    is EnumEgenskap -> value.verdi.toString()
-                    else -> error("unexpected egenskap type: ${value::class.simpleName}")
-                }
-            },
-            stedfestinger = apiVegobjekt.stedfesting!!.let {
-                when (it) {
-                    is StedfestingLinjer -> it.linjer.map {
-                        Utstrekning(
-                            veglenkesekvensId = it.id,
-                            startposisjon = it.startposisjon,
-                            sluttposisjon = it.sluttposisjon
-                        )
-                    }
-
-                    else -> error("unexpected stedfesting type: ${it::class.simpleName}")
-                }
+    private fun toDomain(apiVegobjekt: ApiVegobjekt): Vegobjekt = Vegobjekt(
+        vegobjektId = apiVegobjekt.id,
+        vegobjektType = apiVegobjekt.typeId,
+        egenskaper = apiVegobjekt.egenskaper!!.associate { (key, value) ->
+            key.toInt() to when (value) {
+                is HeltallEgenskap -> value.verdi.toString()
+                is TekstEgenskap -> value.verdi
+                is EnumEgenskap -> value.verdi.toString()
+                else -> error("unexpected egenskap type: ${value::class.simpleName}")
             }
-        )
-        return vegobjekt
-    }
+        },
+        stedfestinger = apiVegobjekt.stedfesting!!.let {
+            when (it) {
+                is StedfestingLinjer -> it.linjer.map {
+                    Utstrekning(
+                        veglenkesekvensId = it.id,
+                        startposisjon = it.startposisjon,
+                        sluttposisjon = it.sluttposisjon
+                    )
+                }
+
+                else -> error("unexpected stedfesting type: ${it::class.simpleName}")
+            }
+        }
+    )
 
     /**
-     * Updates mode: Poll hendelser endpoint and fetch full vegobjekt details.
+     * Updates mode: Stream hendelser and fetch full vegobjekt details.
      */
-    private fun runUpdatesCheck(typeId: Int, progress: ProducerProgress) = runBlocking {
+    private suspend fun runUpdatesCheck(typeId: Int, progress: ProducerProgress) {
         try {
             val startHendelseId = progress.hendelseId
             if (startHendelseId == null) {
                 logger.error("No hendelse ID stored for type {} in UPDATES mode", typeId)
-                return@runBlocking
+                return
             }
 
-            val response = nvdbApiClient.fetchHendelser(typeId, startHendelseId, updatesBatchSize)
-            val hendelser = response.hendelser
-
-            if (hendelser.isEmpty()) {
-                logger.debug("No new hendelser for type {}", typeId)
-                return@runBlocking
-            }
-
-            logger.info("Fetched {} hendelser for type {}", hendelser.size, typeId)
-
-            // Process each hendelse: fetch full vegobjekt and produce to Kafka
             var lastHendelseId = startHendelseId
-            for (hendelse in hendelser) {
-                try {
-                    val vegobjekt = nvdbApiClient.getVegobjekt(typeId, hendelse.vegobjektId)
-                    produceToKafka(typeId, vegobjekt)
-                    lastHendelseId = hendelse.hendelseId
-                } catch (e: Exception) {
-                    logger.error(
-                        "Error fetching vegobjekt {} for hendelse {}: {}",
-                        hendelse.vegobjektId, hendelse.hendelseId, e.message
-                    )
-                    // Continue processing other hendelser
-                }
-            }
+            val topic = NvdbApiClient.getTopicNameForType(typeId)
+            var count = 0
 
-            // Save progress with last processed hendelse ID
-            val newProgress = progress.copy(
-                hendelseId = lastHendelseId,
-                updatedAt = now()
-            )
-            progressRepository.save(newProgress)
-            logger.info("Updates processed for type {}, last hendelse ID = {}", typeId, lastHendelseId)
+            // Wrap all sends in publishScope for at-least-once delivery
+            kafkaPublisher.publishScope {
+                nvdbApiClient.streamVegobjektHendelser(typeId, updatesBatchSize, startHendelseId)
+                    .collect { deltaHendelse ->
+                        try {
+                            // Fetch the current vegobjekt by ID (should return exactly one)
+                            nvdbApiClient.streamVegobjekter(
+                                typeId = typeId,
+                                antall = 1,
+                                start = null,
+                                ider = listOf(deltaHendelse.vegobjektId)
+                            ).collect { apiVegobjekt ->
+                                val domainVegobjekt = toDomain(apiVegobjekt)
+                                val delta = VegobjektDelta(before = null, after = domainVegobjekt)
+
+                                offer(ProducerRecord(topic, deltaHendelse.vegobjektId, delta))
+
+                                lastHendelseId = deltaHendelse.hendelseId
+                                count++
+                            }
+                        } catch (e: Exception) {
+                            logger.error(
+                                "Error processing hendelse {} for vegobjekt {}: {}",
+                                deltaHendelse.hendelseId, deltaHendelse.vegobjektId, e.message
+                            )
+                            // Continue processing other hendelser
+                        }
+                    }
+            }
+            // All sends acknowledged before saving progress
+
+            if (count > 0) {
+                val newProgress = progress.copy(
+                    hendelseId = lastHendelseId,
+                    updatedAt = now()
+                )
+                progressRepository.save(newProgress)
+                logger.info(
+                    "Updates processed for type {}, {} hendelser, last ID = {}",
+                    typeId, count, lastHendelseId
+                )
+            } else {
+                logger.debug("No new hendelser for type {}", typeId)
+            }
 
         } catch (e: Exception) {
             logger.error("Error during updates check for type {}: {}", typeId, e.message, e)
@@ -295,24 +310,5 @@ class NvdbDataProducer(
      */
     fun getStatus(typeId: Int): ProducerProgress? {
         return progressRepository.findByTypeId(typeId)
-    }
-
-    /**
-     * Produce a vegobjekt to its type-specific Kafka topic.
-     */
-    private fun produceToKafka(
-        typeId: Int,
-        before: Vegobjekt?,
-        after: Vegobjekt?,
-    ): CompletableFuture<SendResult<Long, VegobjektDelta>> {
-        val vegobjektId = before?.vegobjektId ?: after?.vegobjektId ?: error("Missing vegobjekt ID")
-        val topic = NvdbApiClient.getTopicNameForType(typeId)
-
-        val delta = VegobjektDelta(
-            before = before,
-            after = after,
-        )
-
-        return vegobjektDeltaKafkaTemplate.send(topic, vegobjektId, delta)
     }
 }

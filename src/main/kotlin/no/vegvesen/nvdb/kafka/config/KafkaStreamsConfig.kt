@@ -1,10 +1,7 @@
 package no.vegvesen.nvdb.kafka.config
 
-import no.vegvesen.nvdb.kafka.model.VegobjektDelta
-import no.vegvesen.nvdb.kafka.serialization.KotlinxJsonSerializer
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.producer.ProducerConfig
-import org.apache.kafka.common.serialization.LongSerializer
 import org.apache.kafka.common.serialization.Serdes
 import org.apache.kafka.streams.StreamsBuilder
 import org.apache.kafka.streams.StreamsConfig
@@ -17,10 +14,7 @@ import org.springframework.kafka.annotation.EnableKafkaStreams
 import org.springframework.kafka.annotation.KafkaStreamsDefaultConfiguration
 import org.springframework.kafka.config.KafkaStreamsConfiguration
 import org.springframework.kafka.config.TopicBuilder
-import org.springframework.kafka.core.DefaultKafkaProducerFactory
 import org.springframework.kafka.core.KafkaAdmin
-import org.springframework.kafka.core.KafkaTemplate
-import org.springframework.kafka.core.ProducerFactory
 
 @Configuration
 @EnableKafkaStreams
@@ -47,18 +41,6 @@ class KafkaStreamsConfig {
         props[StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG] = Serdes.String().javaClass.name
         props[StreamsConfig.STATE_DIR_CONFIG] = "/tmp/kafka-streams"
         return KafkaStreamsConfiguration(props)
-    }
-
-    @Bean
-    fun vegobjektDeltaProducerFactory(): ProducerFactory<Long, VegobjektDelta> {
-        val configProps = mutableMapOf<String, Any>()
-        configProps[ProducerConfig.BOOTSTRAP_SERVERS_CONFIG] = bootstrapServers
-        return DefaultKafkaProducerFactory(configProps, LongSerializer(), KotlinxJsonSerializer())
-    }
-
-    @Bean
-    fun vegobjektDeltaKafkaTemplate(): KafkaTemplate<Long, VegobjektDelta> {
-        return KafkaTemplate(vegobjektDeltaProducerFactory())
     }
 
     @Bean

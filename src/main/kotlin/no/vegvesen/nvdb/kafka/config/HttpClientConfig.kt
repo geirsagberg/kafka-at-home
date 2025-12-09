@@ -6,6 +6,7 @@ import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
+import no.vegvesen.nvdb.kafka.serialization.contextualSerializersModule
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
@@ -14,6 +15,7 @@ import org.springframework.context.annotation.Configuration
 
 val json = Json {
     ignoreUnknownKeys = true
+    serializersModule = contextualSerializersModule
 }
 
 @Configuration
