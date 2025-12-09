@@ -1,22 +1,27 @@
 package no.vegvesen.nvdb.kafka.stream
 
-import kotlinx.coroutines.flow.count
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.future.asDeferred
 import kotlinx.coroutines.runBlocking
+import no.vegvesen.nvdb.api.uberiket.model.EnumEgenskap
+import no.vegvesen.nvdb.api.uberiket.model.HeltallEgenskap
+import no.vegvesen.nvdb.api.uberiket.model.StedfestingLinjer
+import no.vegvesen.nvdb.api.uberiket.model.TekstEgenskap
 import no.vegvesen.nvdb.kafka.api.NvdbApiClient
-import no.vegvesen.nvdb.kafka.model.ProducerMode
-import no.vegvesen.nvdb.kafka.model.ProducerProgress
-import no.vegvesen.nvdb.kafka.model.Vegobjekt
+import no.vegvesen.nvdb.kafka.extensions.associate
+import no.vegvesen.nvdb.kafka.model.*
 import no.vegvesen.nvdb.kafka.repository.ProducerProgressRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.kafka.core.KafkaTemplate
+import org.springframework.kafka.support.SendResult
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
-import java.time.Instant
+import java.time.Instant.now
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Service that manages NVDB data ingestion with two operational modes:
@@ -27,7 +32,7 @@ import java.util.concurrent.atomic.AtomicLong
 @ConditionalOnProperty(name = ["nvdb.producer.enabled"], havingValue = "true")
 class NvdbDataProducer(
     private val nvdbApiClient: NvdbApiClient,
-    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    private val vegobjektDeltaKafkaTemplate: KafkaTemplate<Long, VegobjektDelta>,
     private val progressRepository: ProducerProgressRepository
 ) {
     private val logger = LoggerFactory.getLogger(NvdbDataProducer::class.java)
@@ -44,12 +49,8 @@ class NvdbDataProducer(
     private val isProcessingType915 = AtomicBoolean(false)
     private val isProcessingType916 = AtomicBoolean(false)
 
-    /**
-     * Scheduled task for type 915 (Vegsystem).
-     * Runs every minute, but actual work depends on mode.
-     */
-    @Scheduled(fixedRateString = $$"${nvdb.producer.schedule.type915:60000}")
-    fun processType915() {
+    @Scheduled(cron = "0/5 * * * * *")
+    suspend fun processType915() {
         if (!producerEnabled) return
         if (!isProcessingType915.compareAndSet(false, true)) {
             logger.debug("Type 915 processing already in progress, skipping")
@@ -63,12 +64,8 @@ class NvdbDataProducer(
         }
     }
 
-    /**
-     * Scheduled task for type 916 (Strekning).
-     * Runs every minute, but actual work depends on mode.
-     */
-    @Scheduled(fixedRateString = $$"${nvdb.producer.schedule.type916:60000}")
-    fun processType916() {
+    @Scheduled(cron = "0/5 * * * * *")
+    suspend fun processType916() {
         if (!producerEnabled) return
         if (!isProcessingType916.compareAndSet(false, true)) {
             logger.debug("Type 916 processing already in progress, skipping")
@@ -85,7 +82,7 @@ class NvdbDataProducer(
     /**
      * Main processing logic: delegates to backfill or updates based on current mode.
      */
-    private fun processType(typeId: Int) {
+    private suspend fun processType(typeId: Int) {
         val progress = progressRepository.findByTypeId(typeId)
 
         when (progress?.mode) {
@@ -109,69 +106,85 @@ class NvdbDataProducer(
      * Backfill mode: Fetch vegobjekter using pagination.
      * Processes one batch per invocation, saving progress after each batch.
      */
-    private fun runBackfillBatch(typeId: Int, progress: ProducerProgress) = runBlocking {
+    private suspend fun runBackfillBatch(typeId: Int, progress: ProducerProgress): ProducerProgress {
         try {
             val start = progress.lastProcessedId
-            val lastId = AtomicLong(start ?: 0)
+            val futures = mutableListOf<Pair<Long, CompletableFuture<SendResult<Long, VegobjektDelta>>>>()
 
-            val count = nvdbApiClient.streamVegobjekter(typeId, backfillBatchSize, start)
-                .onEach { vegobjekt ->
-                    produceToKafka(typeId, vegobjekt)
-                    lastId.set(vegobjekt.id)
+            nvdbApiClient.streamVegobjekter(typeId, backfillBatchSize, start)
+                .collect { apiVegobjekt ->
+                    val vegobjekt = toDomain(apiVegobjekt)
+                    val future = produceToKafka(typeId, before = null, after = vegobjekt)
+                    futures.add(vegobjekt.vegobjektId to future)
                 }
-                .count()
 
-            if (count > 0) {
-                val newProgress = progress.copy(
-                    lastProcessedId = lastId.get(),
-                    updatedAt = Instant.now()
+            if (futures.isEmpty()) {
+                val updatedProgress = progress.copy(
+                    mode = ProducerMode.UPDATES,
+                    backfillCompletionTime = now(),
+                    updatedAt = now()
                 )
-                progressRepository.save(newProgress)
+                progressRepository.save(updatedProgress)
                 logger.info(
-                    "Backfill batch for type {}: processed {} items, last ID = {}",
-                    typeId, count, lastId.get()
+                    "Backfill complete for type {}, transitioning to UPDATES mode from hendelse ID {}",
+                    typeId,
+                    progress.hendelseId
                 )
+                return updatedProgress
             }
 
-            // Check if backfill is complete (batch < batch size)
-            if (count < backfillBatchSize) {
-                logger.info("Backfill complete for type {}, transitioning to UPDATES mode", typeId)
-                transitionToUpdatesMode(typeId, progress)
-            }
+            futures.map { it.second.asDeferred() }.awaitAll()
+
+            val lastId = futures.last().first
+            val newProgress = progress.copy(
+                lastProcessedId = lastId,
+                updatedAt = now()
+            )
+            progressRepository.save(newProgress)
+            logger.info(
+                "Backfill batch for type {}: processed {} items, last ID = {}",
+                typeId, futures.size, lastId
+            )
+            return newProgress
 
         } catch (e: Exception) {
             logger.error("Error during backfill for type {}: {}", typeId, e.message, e)
-            progressRepository.save(
-                progress.copy(
-                    lastError = e.message,
-                    updatedAt = Instant.now()
-                )
+            val errorProgress = progress.copy(
+                lastError = e.message,
+                updatedAt = now()
             )
+            progressRepository.save(errorProgress)
+            return errorProgress
         }
     }
 
-    /**
-     * Transition from BACKFILL to UPDATES mode.
-     * Queries the latest hendelse ID to start polling from.
-     */
-    private fun transitionToUpdatesMode(typeId: Int, progress: ProducerProgress) = runBlocking {
-        val latestHendelseId = nvdbApiClient.getLatestHendelseId(typeId)
-        if (latestHendelseId == null) {
-            logger.error("Failed to fetch latest hendelse ID for type {}, cannot transition to UPDATES", typeId)
-            return@runBlocking
-        }
+    private fun toDomain(apiVegobjekt: no.vegvesen.nvdb.api.uberiket.model.Vegobjekt): Vegobjekt {
+        val vegobjekt = Vegobjekt(
+            vegobjektId = apiVegobjekt.id,
+            vegobjektType = apiVegobjekt.typeId,
+            egenskaper = apiVegobjekt.egenskaper!!.associate { (key, value) ->
+                key.toInt() to when (value) {
+                    is HeltallEgenskap -> value.verdi.toString()
+                    is TekstEgenskap -> value.verdi
+                    is EnumEgenskap -> value.verdi.toString()
+                    else -> error("unexpected egenskap type: ${value::class.simpleName}")
+                }
+            },
+            stedfestinger = apiVegobjekt.stedfesting!!.let {
+                when (it) {
+                    is StedfestingLinjer -> it.linjer.map {
+                        Utstrekning(
+                            veglenkesekvensId = it.id,
+                            startposisjon = it.startposisjon,
+                            sluttposisjon = it.sluttposisjon
+                        )
+                    }
 
-        val updatedProgress = progress.copy(
-            mode = ProducerMode.UPDATES,
-            hendelseId = latestHendelseId,
-            backfillCompletionTime = Instant.now(),
-            updatedAt = Instant.now()
+                    else -> error("unexpected stedfesting type: ${it::class.simpleName}")
+                }
+            }
         )
-        progressRepository.save(updatedProgress)
-        logger.info(
-            "Transitioned type {} to UPDATES mode, starting from hendelse ID {}",
-            typeId, latestHendelseId
-        )
+        return vegobjekt
     }
 
     /**
@@ -214,7 +227,7 @@ class NvdbDataProducer(
             // Save progress with last processed hendelse ID
             val newProgress = progress.copy(
                 hendelseId = lastHendelseId,
-                updatedAt = Instant.now()
+                updatedAt = now()
             )
             progressRepository.save(newProgress)
             logger.info("Updates processed for type {}, last hendelse ID = {}", typeId, lastHendelseId)
@@ -224,7 +237,7 @@ class NvdbDataProducer(
             progressRepository.save(
                 progress.copy(
                     lastError = e.message,
-                    updatedAt = Instant.now()
+                    updatedAt = now()
                 )
             )
         }
@@ -242,21 +255,19 @@ class NvdbDataProducer(
         }
 
         // Query latest hendelse ID before starting backfill
-        val latestHendelseId = nvdbApiClient.getLatestHendelseId(typeId)
-        if (latestHendelseId == null) {
-            logger.error("Failed to fetch latest hendelse ID for type {}, cannot start backfill", typeId)
-            throw IllegalStateException("Cannot fetch latest hendelse ID")
-        }
+        val latestHendelseId = nvdbApiClient.getLatestVegobjektHendelseId(typeId)
+
+        val now = now()
 
         val progress = ProducerProgress(
             typeId = typeId,
             mode = ProducerMode.BACKFILL,
             lastProcessedId = null,
             hendelseId = latestHendelseId,
-            backfillStartTime = Instant.now(),
+            backfillStartTime = now,
             backfillCompletionTime = null,
             lastError = null,
-            updatedAt = Instant.now()
+            updatedAt = now
         )
         progressRepository.save(progress)
         logger.info("Started backfill for type {}, stored hendelse ID {} for later", typeId, latestHendelseId)
@@ -289,29 +300,19 @@ class NvdbDataProducer(
     /**
      * Produce a vegobjekt to its type-specific Kafka topic.
      */
-    private fun produceToKafka(typeId: Int, vegobjekt: Vegobjekt) {
-        try {
-            val topic = NvdbApiClient.getTopicNameForType(typeId)
-            val key = vegobjekt.id.toString()
+    private fun produceToKafka(
+        typeId: Int,
+        before: Vegobjekt?,
+        after: Vegobjekt?,
+    ): CompletableFuture<SendResult<Long, VegobjektDelta>> {
+        val vegobjektId = before?.vegobjektId ?: after?.vegobjektId ?: error("Missing vegobjekt ID")
+        val topic = NvdbApiClient.getTopicNameForType(typeId)
 
-            kafkaTemplate.send(topic, key, vegobjekt)
-                .whenComplete { result, ex ->
-                    if (ex != null) {
-                        logger.error(
-                            "Failed to produce vegobjekt {} to topic {}: {}",
-                            vegobjekt.id, topic, ex.message
-                        )
-                    } else {
-                        logger.debug(
-                            "Produced vegobjekt {} to topic {} partition {}",
-                            vegobjekt.id,
-                            topic,
-                            result?.recordMetadata?.partition()
-                        )
-                    }
-                }
-        } catch (e: Exception) {
-            logger.error("Error producing vegobjekt {}: {}", vegobjekt.id, e.message)
-        }
+        val delta = VegobjektDelta(
+            before = before,
+            after = after,
+        )
+
+        return vegobjektDeltaKafkaTemplate.send(topic, vegobjektId, delta)
     }
 }

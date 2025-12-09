@@ -1,10 +1,11 @@
 package no.vegvesen.nvdb.kafka.config
 
+import no.vegvesen.nvdb.kafka.model.VegobjektDelta
 import no.vegvesen.nvdb.kafka.serialization.KotlinxJsonSerializer
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.serialization.LongSerializer
 import org.apache.kafka.common.serialization.Serdes
-import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.kafka.streams.StreamsBuilder
 import org.apache.kafka.streams.StreamsConfig
 import org.apache.kafka.streams.kstream.KStream
@@ -20,7 +21,6 @@ import org.springframework.kafka.core.DefaultKafkaProducerFactory
 import org.springframework.kafka.core.KafkaAdmin
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.core.ProducerFactory
-import kotlin.jvm.java
 
 @Configuration
 @EnableKafkaStreams
@@ -50,17 +50,15 @@ class KafkaStreamsConfig {
     }
 
     @Bean
-    fun producerFactory(): ProducerFactory<String, Any> {
+    fun vegobjektDeltaProducerFactory(): ProducerFactory<Long, VegobjektDelta> {
         val configProps = mutableMapOf<String, Any>()
         configProps[ProducerConfig.BOOTSTRAP_SERVERS_CONFIG] = bootstrapServers
-        configProps[ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG] = StringSerializer::class.java
-        configProps[ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG] = KotlinxJsonSerializer::class.java
-        return DefaultKafkaProducerFactory(configProps)
+        return DefaultKafkaProducerFactory(configProps, LongSerializer(), KotlinxJsonSerializer())
     }
 
     @Bean
-    fun kafkaTemplate(): KafkaTemplate<String, Any> {
-        return KafkaTemplate(producerFactory())
+    fun vegobjektDeltaKafkaTemplate(): KafkaTemplate<Long, VegobjektDelta> {
+        return KafkaTemplate(vegobjektDeltaProducerFactory())
     }
 
     @Bean

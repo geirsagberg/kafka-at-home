@@ -1,14 +1,21 @@
 package no.vegvesen.nvdb.kafka.api
 
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.utils.io.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.toList
-import no.vegvesen.nvdb.kafka.model.Veglenke
-import no.vegvesen.nvdb.kafka.model.Vegobjekt
+import kotlinx.coroutines.flow.flow
+import no.vegvesen.nvdb.api.uberiket.model.Vegobjekt
+import no.vegvesen.nvdb.api.uberiket.model.VegobjektDeltaHendelse
+import no.vegvesen.nvdb.api.uberiket.model.VegobjektNotifikasjon
+import no.vegvesen.nvdb.kafka.config.json
 import org.slf4j.LoggerFactory
+import org.springframework.http.HttpStatusCode
 import org.springframework.stereotype.Service
-import org.springframework.web.reactive.function.client.WebClient
-import org.springframework.web.reactive.function.client.awaitBody
-import org.springframework.web.reactive.function.client.bodyToFlow
+import org.springframework.web.server.ResponseStatusException
 
 /**
  * Client for the NVDB Uberiket API.
@@ -16,168 +23,34 @@ import org.springframework.web.reactive.function.client.bodyToFlow
  * and road objects like speed limits.
  */
 @Service
-class NvdbApiClient(private val nvdbWebClient: WebClient) {
+class NvdbApiClient(private val httpClient: HttpClient) {
 
     private val logger = LoggerFactory.getLogger(NvdbApiClient::class.java)
 
-    /**
-     * Stream road objects (vegobjekter) of a specific type from the NVDB API.
-     * Uses the NDJSON stream endpoint.
-     *
-     * @param typeId The type ID of the road object (e.g., 105 for speed limits)
-     * @param antall Maximum number of records to fetch per request
-     * @param start Optional starting object ID for pagination (fetch objects after this ID)
-     * @return Flow of Vegobjekt objects
-     */
-    fun streamVegobjekter(typeId: Int, antall: Int = 1000, start: Long? = null): Flow<Vegobjekt> {
-        logger.info("Fetching vegobjekter of type {} from NVDB API (start: {})", typeId, start)
-        return nvdbWebClient.get()
-            .uri { uriBuilder ->
-                val builder = uriBuilder
-                    .path("vegobjekter/$typeId/stream")
-                    .queryParam("antall", antall)
-                if (start != null) {
-                    builder.queryParam("start", start)
-                }
-                builder.build()
-            }
-            .accept(org.springframework.http.MediaType.APPLICATION_NDJSON)
-            .retrieve()
-            .bodyToFlow<Vegobjekt>()
-    }
 
-    /**
-     * Fetch a single road object by its ID.
-     *
-     * @param typeId The type ID of the road object
-     * @param objectId The ID of the specific road object
-     * @return The Vegobjekt if found
-     */
-    suspend fun getVegobjekt(typeId: Int, objectId: Long): Vegobjekt {
-        logger.debug("Fetching vegobjekt {} of type {}", objectId, typeId)
-        return nvdbWebClient.get()
-            .uri("vegobjekter/$typeId/$objectId")
-            .retrieve()
-            .awaitBody()
-    }
-
-    /**
-     * Fetch veglenker by veglenkesekvens IDs using the streaming API.
-     * The stream endpoint returns flattened Veglenke objects directly.
-     * One veglenkesekvens contains many veglenker (identified by veglenkenummer).
-     *
-     * Pagination: The start parameter should be "[veglenkesekvensId]-[veglenkenummer]"
-     * from the last veglenke received.
-     *
-     * @param veglenkesekvensIds List of veglenkesekvens IDs
-     * @param antall Records per page (default: 1000)
-     * @return List of all Veglenke objects from the given veglenkesekvenser
-     */
-    suspend fun fetchVeglenkerByVeglenkesekvensIds(veglenkesekvensIds: List<Long>, antall: Int = 1000): List<Veglenke> {
-        if (veglenkesekvensIds.isEmpty()) return emptyList()
-
-        logger.debug("Fetching veglenker for {} veglenkesekvens IDs", veglenkesekvensIds.size)
-        val allVeglenker = mutableListOf<Veglenke>()
-        var start: String? = null
-
-        do {
-            val currentStart = start
-            val batch = nvdbWebClient.get()
-                .uri { uriBuilder ->
-                    val builder = uriBuilder.path("vegnett/veglenker/stream")
-                    veglenkesekvensIds.forEach { id -> builder.queryParam("ider", id) }
-                    builder.queryParam("antall", antall)
-                    if (currentStart != null) {
-                        builder.queryParam("start", currentStart)
-                    }
-                    builder.build()
-                }
-                .retrieve()
-                .bodyToFlow<Veglenke>()
-                .toList()
-
-            allVeglenker.addAll(batch)
-
-            // Set start parameter as "[veglenkesekvensId]-[veglenkenummer]" from last veglenke
-            start = if (batch.size == antall) {
-                val lastVeglenke = batch.last()
-                val sekvensId = lastVeglenke.veglenkesekvensId
-                val veglenkenr = lastVeglenke.veglenkenummer
-                if (sekvensId != null && veglenkenr != null) {
-                    "$sekvensId-$veglenkenr"
-                } else {
-                    null
-                }
-            } else {
-                null
-            }
-        } while (start != null)
-
-        logger.debug("Fetched {} veglenker total", allVeglenker.size)
-        return allVeglenker
-    }
-
-    /**
-     * Blocking version for use in Kafka Streams topology.
-     * Leverages virtual threads for efficient blocking.
-     */
-    fun fetchVeglenkerByVeglenkesekvensIdsBlocking(veglenkesekvensIds: List<Long>, antall: Int = 1000): List<Veglenke> {
-        return kotlinx.coroutines.runBlocking {
-            fetchVeglenkerByVeglenkesekvensIds(veglenkesekvensIds, antall)
-        }
-    }
-
-    /**
-     * Get the latest hendelse ID for a type without fetching actual events.
-     * Queries with antall=1 and extracts the hendelseId.
-     */
-    suspend fun getLatestHendelseId(typeId: Int): Long? {
-        logger.info("Fetching latest hendelse ID for type {}", typeId)
-        return try {
-            val response = nvdbWebClient.get()
-                .uri { uriBuilder ->
-                    uriBuilder
-                        .path("hendelser/vegobjekter/$typeId")
-                        .queryParam("antall", 1)
-                        .build()
-                }
-                .retrieve()
-                .awaitBody<no.vegvesen.nvdb.kafka.model.VegobjektHendelserResponse>()
-
-            response.hendelser.firstOrNull()?.hendelseId
-        } catch (e: Exception) {
-            logger.error("Error fetching latest hendelse ID for type {}: {}", typeId, e.message)
-            null
-        }
-    }
-
-    /**
-     * Stream hendelser for a specific type from a given start hendelse ID.
-     *
-     * @param typeId The type ID
-     * @param startHendelseId Optional starting hendelse ID for pagination
-     * @param antall Number of events per page (default: 1000)
-     * @return Response with list of hendelser
-     */
-    suspend fun fetchHendelser(
+    suspend fun streamVegobjekter(
         typeId: Int,
-        startHendelseId: Long? = null,
-        antall: Int = 1000
-    ): no.vegvesen.nvdb.kafka.model.VegobjektHendelserResponse {
-        logger.debug("Fetching hendelser for type {} (start: {})", typeId, startHendelseId)
-        return nvdbWebClient.get()
-            .uri { uriBuilder ->
-                val builder = uriBuilder
-                    .path("hendelser/vegobjekter/$typeId")
-                    .queryParam("antall", antall)
-                if (startHendelseId != null) {
-                    builder.queryParam("start", startHendelseId)
-                }
-                builder.build()
-            }
-            .retrieve()
-            .awaitBody()
-    }
+        antall: Int = 500,
+        start: Long?,
+        ider: Collection<Long>? = null,
+    ): Flow<Vegobjekt> = httpClient
+        .prepareGet("vegobjekter/$typeId/stream") {
+            parameter("start", start)
+            parameter("antall", antall)
+            parameter("ider", ider?.joinToString(","))
+        }.executeAsNdjsonFlow<Vegobjekt>()
+
+    suspend fun getLatestVegobjektHendelseId(typeId: Int): Long = httpClient
+        .get("hendelser/vegobjekter/$typeId/siste")
+        .body<VegobjektNotifikasjon>()
+        .hendelseId
+
+    suspend fun streamVegobjektHendelser(typeId: Int, antall: Int = 500, start: Long?): Flow<VegobjektDeltaHendelse> =
+        httpClient
+            .prepareGet("hendelser/vegobjekter/$typeId/stream") {
+                parameter("start", start)
+                parameter("antall", antall)
+            }.executeAsNdjsonFlow<VegobjektDeltaHendelse>()
 
     companion object {
         // Common road object type IDs from NVDB
@@ -195,5 +68,27 @@ class NvdbApiClient(private val nvdbWebClient: WebClient) {
         fun getTopicNameForType(typeId: Int): String {
             return "nvdb-vegobjekter-$typeId"
         }
+    }
+}
+
+// Generic ndjson flow extension for HttpStatement
+inline fun <reified T> HttpStatement.executeAsNdjsonFlow(): Flow<T> = flow {
+    execute { response ->
+        if (!response.status.isSuccess()) {
+            throw ResponseStatusException(response.status.let { HttpStatusCode.valueOf(it.value) })
+        }
+
+        val channel = response.bodyAsChannel()
+        channel.ndjsonFlow<T>().collect { emit(it) }
+    }
+}
+
+// Generic ndjson flow extension for ByteReadChannel
+inline fun <reified T> ByteReadChannel.ndjsonFlow(): Flow<T> = flow {
+    while (!isClosedForRead) {
+        val line = readUTF8Line() ?: break
+        if (line.isBlank()) continue
+        val item = json.decodeFromString<T>(line)
+        emit(item)
     }
 }
